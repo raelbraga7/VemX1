@@ -1,0 +1,82 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Função auxiliar para verificar se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Função auxiliar para verificar se o usuário é dono do documento
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Função para verificar se o usuário está na lista de confirmados
+    function isConfirmado(confirmados) {
+      return confirmados != null && confirmados.hasAny([{'id': request.auth.uid}]);
+    }
+
+    // Função para verificar se o usuário está na lista de players
+    function isInPlayers(players) {
+      return players != null && players.hasAny([request.auth.uid]);
+    }
+
+    // Regras para a coleção users
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+      
+      // Permitir acesso aos tokens FCM do usuário
+      match /fcm_tokens/{tokenId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Regras para a coleção de notificações
+    match /notifications/{notificationId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.senderId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Regras para a coleção de rankings
+    match /rankings/{rankingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && rankingId == request.auth.uid;
+    }
+
+    // Regras para a coleção de peladas
+    match /peladas/{peladaId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid || 
+        isInPlayers(resource.data.players) ||
+        isInPlayers(request.resource.data.players) ||
+        isConfirmado(resource.data.confirmados) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasAny(['confirmados', 'ranking', 'historico'])
+        )
+      );
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Regras para a coleção partidas
+    match /partidas/{partidaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        get(/databases/$(database)/documents/peladas/$(resource.data.peladaId)).data.players.hasAny([request.auth.uid]) ||
+        get(/databases/$(database)/documents/peladas/$(resource.data.peladaId)).data.ownerId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && 
+        get(/databases/$(database)/documents/peladas/$(resource.data.peladaId)).data.ownerId == request.auth.uid;
+    }
+  }
+} 

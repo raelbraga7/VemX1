@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Função auxiliar para verificar se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Função para verificar se o usuário é o dono da pelada
+    function isOwner(peladaId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/peladas/$(peladaId)) &&
+             get(/databases/$(database)/documents/peladas/$(peladaId)).data.ownerId == request.auth.uid;
+    }
+    
+    // Função para verificar se o usuário é jogador da pelada
+    function isPlayer(peladaId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/peladas/$(peladaId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/peladas/$(peladaId)).data.players;
+    }
+
+    // Função para validar a atualização via convite
+    function isValidInviteUpdate(peladaId) {
+      let pelada = get(/databases/$(database)/documents/peladas/$(peladaId));
+      let currentPlayers = pelada.data.players;
+      let newPlayers = request.resource.data.players;
+      
+      // Verifica se o usuário está tentando se adicionar à pelada
+      return isAuthenticated() &&
+             (newPlayers.hasAll(currentPlayers) || currentPlayers == null) &&
+             request.auth.uid in newPlayers;
+    }
+
+    // Função para verificar se está tentando remover jogadores
+    function isRemovingPlayers(peladaId) {
+      let pelada = get(/databases/$(database)/documents/peladas/$(peladaId));
+      let currentPlayers = pelada.data.players;
+      let newPlayers = request.resource.data.players;
+      
+      return currentPlayers.size() > newPlayers.size();
+    }
+
+    // Regras para a coleção de peladas
+    match /peladas/{peladaId} {
+      allow create: if isAuthenticated();
+      allow read: if true;
+      allow update: if isAuthenticated() && 
+                   (isOwner(peladaId) || isPlayer(peladaId));
+      allow delete: if isOwner(peladaId);
+    }
+
+    // Regras para a coleção de usuários
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Regras para a subcoleção de tokens FCM
+      match /fcm_tokens/{tokenId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
+
+    // Regras para a coleção de notificações
+    match /notifications/{notificationId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource == null || 
+        resource.data.userId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        (resource.data.peladaId != null && isOwner(resource.data.peladaId))
+      );
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Regras para a coleção de partidas
+    match /partidas/{partidaId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && 
+                      (isOwner(resource.data.peladaId) || 
+                       isPlayer(resource.data.peladaId));
+    }
+  }
+} 
