@@ -13,4 +13,8 @@ export interface Notification {
   };
   respondido?: boolean;
   resposta?: 'confirmado' | 'recusado';
-} 
+  senderId?: string;
+}
+
+export type NotificationType = 'CONVITE' | 'CONFIRMACAO' | 'GERAL';
+export type NotificationResponse = 'confirmado' | 'recusado' | null; 

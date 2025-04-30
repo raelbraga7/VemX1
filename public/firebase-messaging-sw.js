@@ -5,25 +5,19 @@ const SW_VERSION = '1.0.0';
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// IMPORTANTE: Substitua estes valores pelos seus do Firebase Console
+// Configuração do Firebase
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDmbwrhiyU1sxl5BQy6qHeNd9_LUV5MTJQ",
+  authDomain: "vemx1-app.firebaseapp.com",
+  projectId: "vemx1-app",
+  storageBucket: "vemx1-app.appspot.com",
+  messagingSenderId: "479038972951",
+  appId: "1:479038972951:web:e436b71775539c1109a852",
+  measurementId: "G-TCM9QM37BT"
 };
 
 // Inicializa o Firebase
-firebase.initializeApp({
-  apiKey: self.FIREBASE_CONFIG.apiKey,
-  authDomain: self.FIREBASE_CONFIG.authDomain,
-  projectId: self.FIREBASE_CONFIG.projectId,
-  storageBucket: self.FIREBASE_CONFIG.storageBucket,
-  messagingSenderId: self.FIREBASE_CONFIG.messagingSenderId,
-  appId: self.FIREBASE_CONFIG.appId
-});
+firebase.initializeApp(firebaseConfig);
 
 // Obtém uma instância do Firebase Messaging
 const messaging = firebase.messaging();

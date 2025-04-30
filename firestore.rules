@@ -67,6 +67,15 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
     }
 
+    // Regras para a coleção times
+    match /times/{timeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && 
+        (get(/databases/$(database)/documents/peladas/$(resource.data.peladaId)).data.ownerId == request.auth.uid);
+    }
+
     // Regras para a coleção partidas
     match /partidas/{partidaId} {
       allow read: if isAuthenticated();

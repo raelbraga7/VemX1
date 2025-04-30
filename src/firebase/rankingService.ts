@@ -1,5 +1,5 @@
 import { db } from './config';
-import { collection, doc, getDoc, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, Timestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth } from './config';
 
 export interface PlayerStats {
@@ -50,6 +50,10 @@ interface RankingData {
   assistencias: number;
   pontos: number;
 }
+
+// Cache para armazenar os rankings calculados
+const rankingCache = new Map<string, { data: PlayerStats[]; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos em milissegundos
 
 /**
  * Busca a pelada pelo ID
@@ -116,174 +120,98 @@ export const getUserById = async (uid: string): Promise<{ nome: string } | null>
 };
 
 /**
- * Calcula as estatísticas de um jogador em uma partida
- */
-const calcularEstatisticasJogador = (
-  uid: string, 
-  partida: Partida, 
-  timeVencedor: 'A' | 'B' | null
-): { gols: number; assistencias: number; vitoria: boolean } => {
-  // Inicializa as estatísticas
-  let gols = 0;
-  let assistencias = 0;
-  let vitoria = false;
-  
-  // Verifica se o jogador está em algum dos times
-  const estaNoTimeA = partida.timeA.jogadores.includes(uid);
-  const estaNoTimeB = partida.timeB.jogadores.includes(uid);
-  
-  if (!estaNoTimeA && !estaNoTimeB) {
-    return { gols: 0, assistencias: 0, vitoria: false };
-  }
-  
-  // Determina em qual time o jogador está
-  const timeJogador = estaNoTimeA ? 'A' : 'B';
-  
-  // Verifica se o time do jogador venceu
-  if (timeVencedor === timeJogador) {
-    vitoria = true;
-  }
-  
-  // Busca as estatísticas da partida para o jogador
-  if (partida.estatisticas && partida.estatisticas[uid]) {
-    gols = partida.estatisticas[uid].gols || 0;
-    assistencias = partida.estatisticas[uid].assistencias || 0;
-  }
-  
-  return { gols, assistencias, vitoria };
-};
-
-/**
- * Calcula o ranking de jogadores de uma pelada
+ * Calcula o ranking de jogadores de uma pelada com cache
  */
 export const calcularRankingPelada = async (peladaId: string): Promise<PlayerStats[]> => {
   try {
-    // Verifica se o usuário está autenticado
+    // Verifica cache
+    const cachedRanking = rankingCache.get(peladaId);
+    if (cachedRanking && Date.now() - cachedRanking.timestamp < CACHE_DURATION) {
+      console.log('Retornando ranking do cache para pelada:', peladaId);
+      return cachedRanking.data;
+    }
+
+    // Verifica autenticação
     if (!auth.currentUser) {
-      console.error('Tentativa de calcular ranking sem autenticação');
       throw new Error('Usuário não autenticado');
     }
 
-    console.log('Iniciando cálculo de ranking para pelada:', peladaId);
-    
-    // Busca a pelada
+    // Busca pelada e verifica permissões
     const pelada = await getPeladaById(peladaId);
     if (!pelada) {
-      console.error('Pelada não encontrada:', peladaId);
       throw new Error('Pelada não encontrada');
     }
 
-    // Verifica se o usuário tem permissão para ver a pelada
     const userIsOwner = pelada.ownerId === auth.currentUser.uid;
     const userIsPlayer = pelada.players.includes(auth.currentUser.uid);
     
     if (!userIsOwner && !userIsPlayer) {
-      console.error('Usuário não tem permissão para ver esta pelada');
       throw new Error('Sem permissão para ver esta pelada');
     }
-    
-    console.log('Pelada encontrada:', {
-      id: pelada.id,
-      nome: pelada.nome,
-      numJogadores: pelada.players.length,
-      jogadores: pelada.players,
-      userIsOwner,
-      userIsPlayer
-    });
-    
-    // Busca todas as partidas concluídas da pelada
+
+    // Busca partidas e calcula ranking em batch
     const partidas = await getPartidasByPeladaId(peladaId);
-    console.log('Partidas encontradas:', {
-      quantidade: partidas.length,
-      partidas: partidas.map(p => ({
-        id: p.id,
-        data: p.data,
-        timeA: p.timeA.jogadores.length,
-        timeB: p.timeB.jogadores.length,
-        placar: `${p.timeA.score} x ${p.timeB.score}`,
-        temEstatisticas: !!p.estatisticas
-      }))
-    });
-    
-    // Inicializa o mapa de estatísticas dos jogadores
-    const statsMap = new Map<string, PlayerStats>();
-    
-    // Inicializa as estatísticas para todos os jogadores da pelada
-    for (const uid of pelada.players) {
-      const userData = await getUserById(uid);
-      console.log('Dados do usuário carregados:', {
-        uid,
-        nome: userData?.nome || 'Jogador Desconhecido'
-      });
-      
-      statsMap.set(uid, {
-        uid,
-        nome: userData?.nome || 'Jogador Desconhecido',
-        vitorias: 0,
-        gols: 0,
-        assistencias: 0,
-        pontos: 0
-      });
-    }
-    
-    console.log('Estatísticas inicializadas para', statsMap.size, 'jogadores');
-    
-    // Calcula as estatísticas para cada partida
-    for (const partida of partidas) {
-      console.log('Processando partida:', {
-        id: partida.id,
-        placar: `${partida.timeA.score} x ${partida.timeB.score}`,
-        estatisticas: partida.estatisticas
-      });
-      
-      // Determina qual time venceu
-      let timeVencedor: 'A' | 'B' | null = null;
-      if (partida.timeA.score > partida.timeB.score) {
-        timeVencedor = 'A';
-      } else if (partida.timeB.score > partida.timeA.score) {
-        timeVencedor = 'B';
-      }
-      
-      // Processa cada jogador da pelada
-      for (const uid of pelada.players) {
-        const { gols, assistencias, vitoria } = calcularEstatisticasJogador(uid, partida, timeVencedor);
-        
-        // Atualiza as estatísticas do jogador
-        const playerStats = statsMap.get(uid)!;
-        const statsAnteriores = { ...playerStats };
-        
-        playerStats.gols += gols;
-        playerStats.assistencias += assistencias;
-        if (vitoria) {
-          playerStats.vitorias += 1;
-        }
-        
-        // Calcula a pontuação total
-        playerStats.pontos = (playerStats.vitorias * 3) + (playerStats.gols * 2) + playerStats.assistencias;
-        
-        console.log('Estatísticas atualizadas:', {
-          jogador: playerStats.nome,
-          antes: statsAnteriores,
-          depois: { ...playerStats },
-          partidaAtual: { gols, assistencias, vitoria }
+    const rankingMap = new Map<string, RankingData>();
+
+    // Inicializa ranking para todos os jogadores
+    for (const playerId of pelada.players) {
+      const userData = await getUserById(playerId);
+      if (userData) {
+        rankingMap.set(playerId, {
+          nome: userData.nome,
+          vitorias: 0,
+          gols: 0,
+          assistencias: 0,
+          pontos: 0
         });
-        
-        statsMap.set(uid, playerStats);
       }
     }
-    
-    // Converte o mapa para um array e ordena por pontuação
-    const ranking = Array.from(statsMap.values()).sort((a, b) => b.pontos - a.pontos);
-    
-    console.log('Ranking final calculado:', ranking);
-    
-    return ranking;
-  } catch (error) {
-    console.error('Erro ao calcular ranking:', {
-      error,
-      message: error instanceof Error ? error.message : 'Erro desconhecido',
-      stack: error instanceof Error ? error.stack : undefined
+
+    // Processa todas as partidas de uma vez
+    for (const partida of partidas) {
+      const timeVencedor = partida.timeA.score > partida.timeB.score ? 'A' : 
+                          partida.timeB.score > partida.timeA.score ? 'B' : null;
+
+      // Atualiza estatísticas para todos os jogadores da partida
+      const processarTime = (time: 'A' | 'B') => {
+        const jogadores = time === 'A' ? partida.timeA.jogadores : partida.timeB.jogadores;
+        const venceu = timeVencedor === time;
+
+        for (const uid of jogadores) {
+          const rankingJogador = rankingMap.get(uid);
+          if (rankingJogador) {
+            const stats = partida.estatisticas?.[uid] || { gols: 0, assistencias: 0 };
+            
+            rankingJogador.gols += stats.gols;
+            rankingJogador.assistencias += stats.assistencias;
+            if (venceu) {
+              rankingJogador.vitorias += 1;
+              rankingJogador.pontos += 3;
+            }
+            rankingJogador.pontos += stats.gols * 2 + stats.assistencias;
+          }
+        }
+      };
+
+      processarTime('A');
+      processarTime('B');
+    }
+
+    // Converte o Map para array e ordena
+    const rankingFinal = Array.from(rankingMap.entries()).map(([uid, data]) => ({
+      uid,
+      ...data
+    })).sort((a, b) => b.pontos - a.pontos);
+
+    // Atualiza o cache
+    rankingCache.set(peladaId, {
+      data: rankingFinal,
+      timestamp: Date.now()
     });
+
+    return rankingFinal;
+  } catch (error) {
+    console.error('Erro ao calcular ranking:', error);
     throw error;
   }
 };
@@ -312,15 +240,42 @@ export const getRankingAtual = async (peladaId: string): Promise<PlayerStats[]> 
     const peladaData = peladaDoc.data();
     const ranking = (peladaData?.ranking || {}) as { [key: string]: RankingData };
 
-    // Converte o objeto de ranking em um array
-    const rankingArray = Object.entries(ranking).map(([uid, data]) => ({
-      uid,
-      nome: data.nome || '',
-      vitorias: data.vitorias || 0,
-      gols: data.gols || 0,
-      assistencias: data.assistencias || 0,
-      pontos: data.pontos || 0
-    }));
+    // Garante que o dono está no ranking
+    if (peladaData.ownerId && !ranking[peladaData.ownerId]) {
+      const ownerData = await getUserById(peladaData.ownerId);
+      if (ownerData) {
+        ranking[peladaData.ownerId] = {
+          nome: ownerData.nome,
+          vitorias: 0,
+          gols: 0,
+          assistencias: 0,
+          pontos: 0
+        };
+        
+        // Atualiza o documento da pelada com o ranking do dono
+        await updateDoc(peladaRef, {
+          [`ranking.${peladaData.ownerId}`]: ranking[peladaData.ownerId]
+        });
+      }
+    }
+
+    // Converte o objeto de ranking em um array e busca os nomes dos usuários
+    const rankingPromises = Object.entries(ranking).map(async ([uid, data]) => {
+      // Busca os dados do usuário
+      const userData = await getUserById(uid);
+      
+      return {
+        uid,
+        nome: userData?.nome || data.nome || 'Jogador Desconhecido',
+        vitorias: data.vitorias || 0,
+        gols: data.gols || 0,
+        assistencias: data.assistencias || 0,
+        pontos: data.pontos || 0
+      };
+    });
+
+    // Aguarda todas as promessas serem resolvidas
+    const rankingArray = await Promise.all(rankingPromises);
 
     // Ordena por pontos
     return rankingArray.sort((a, b) => b.pontos - a.pontos);

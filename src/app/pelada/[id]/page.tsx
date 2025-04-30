@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
-import { getPelada } from '@/firebase/peladaService';
+import { getPelada, PeladaData } from '@/firebase/peladaService';
 import { createPeladaNotification } from '@/firebase/notificationService';
 import PeladaConfigModal from '@/components/PeladaConfigModal';
+import RankingTable from '@/components/RankingTable';
+import SeasonTable from '@/components/SeasonTable';
+import { LogoutButton } from '@/components/LogoutButton';
 
 interface Time {
   nome: string;
@@ -23,6 +26,8 @@ export default function PaginaPelada() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [times] = useState<Time[]>([]);
+  const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -39,7 +44,15 @@ export default function PaginaPelada() {
         }
 
         // Busca os dados da pelada
-        await getPelada(id);
+        const pelada = await getPelada(id);
+        setPeladaData(pelada);
+        const isDono = pelada.ownerId === user?.uid;
+        setIsOwner(isDono);
+        console.log('Verificação de dono da pelada:', {
+          peladaOwnerId: pelada.ownerId,
+          currentUserId: user?.uid,
+          isDono: isDono
+        });
         setLoading(false);
       } catch (err) {
         console.error('Erro ao inicializar página:', err);
@@ -49,7 +62,7 @@ export default function PaginaPelada() {
     };
 
     init();
-  }, [params?.id, searchParams]);
+  }, [params?.id, searchParams, user?.uid]);
 
   const handleConfigSaved = async (peladaId: string) => {
     setShowConfigModal(false);
@@ -89,12 +102,34 @@ export default function PaginaPelada() {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Gerenciar Pelada</h1>
-          <button
-            onClick={() => setShowConfigModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Configurar Pelada
-          </button>
+          <div className="flex gap-4">
+            {peladaData?.ownerId === user?.uid && (
+              <button
+                onClick={() => setShowConfigModal(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Configurar Pelada
+              </button>
+            )}
+            <LogoutButton />
+          </div>
+        </div>
+        
+        {/* Season Table */}
+        {peladaData && (
+          <div className="mb-8">
+            <SeasonTable 
+              peladaId={params.id as string}
+              temporada={peladaData.temporada}
+              isOwner={isOwner}
+            />
+          </div>
+        )}
+
+        {/* Ranking Table */}
+        <div className="bg-black rounded-lg shadow-lg overflow-hidden">
+          <h2 className="text-xl font-semibold mb-4">Ranking dos Jogadores</h2>
+          <RankingTable peladaId={params.id as string} />
         </div>
         
         {showModal && times.length > 0 && (
@@ -131,12 +166,15 @@ export default function PaginaPelada() {
           </div>
         )}
 
-        {/* Modal de Configuração */}
-        <PeladaConfigModal
-          isOpen={showConfigModal}
-          onClose={() => setShowConfigModal(false)}
-          onSave={handleConfigSaved}
-        />
+        {/* Config Modal */}
+        {showConfigModal && (
+          <PeladaConfigModal
+            isOpen={showConfigModal}
+            onClose={() => setShowConfigModal(false)}
+            onSave={handleConfigSaved}
+            peladaId={params.id as string}
+          />
+        )}
       </div>
     </div>
   );

@@ -3,7 +3,11 @@
 import { useUser } from '@/contexts/UserContext';
 import { LogoutButton } from './LogoutButton';
 
-export default function WelcomeHeader() {
+interface WelcomeHeaderProps {
+  onLogout?: () => Promise<void>;
+}
+
+export default function WelcomeHeader({ onLogout }: WelcomeHeaderProps) {
   const { userData, loading } = useUser();
 
   if (loading) {
@@ -20,7 +24,7 @@ export default function WelcomeHeader() {
     return (
       <div className="p-4 mb-6 flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Bem-vindo!</h1>
-        <LogoutButton />
+        <LogoutButton onLogout={onLogout} />
       </div>
     );
   }
@@ -30,7 +34,7 @@ export default function WelcomeHeader() {
       <h1 className="text-2xl font-bold text-gray-800">
         Bem-vindo, {userData.nome}!
       </h1>
-      <LogoutButton />
+      <LogoutButton onLogout={onLogout} />
     </div>
   );
 } 

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot, updateDoc, getDoc, arrayUnion, DocumentData } from 'firebase/firestore';
 import { db } from '@/firebase/config';
-import { toast } from 'react-toastify';
+import { toast } from 'react-hot-toast';
 import { 
   IconButton, 
   Tooltip, 
@@ -27,6 +27,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 interface Jogador {
   id: string;
+  uid?: string;
   nome: string;
   gols: number;
   assistencias: number;
@@ -64,6 +65,17 @@ interface TimeSelecionado {
   selecionado: boolean;
 }
 
+interface RankingUpdate {
+  jogos: number;
+  gols: number;
+  assistencias: number;
+  vitorias: number;
+  derrotas: number;
+  empates: number;
+  pontos: number;
+  nome: string;
+}
+
 export default function Partida() {
   const params = useParams();
   const router = useRouter();
@@ -78,12 +90,15 @@ export default function Partida() {
   const [openModal, setOpenModal] = useState(false);
   const [timesSalvos, setTimesSalvos] = useState<Time[]>([]);
   const [timesSelecionados, setTimesSelecionados] = useState<TimeSelecionado[]>([]);
+  
+  // Referência para a função de finalizar partida
+  const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
 
   // Função para carregar os times salvos
   const carregarTimesSalvos = useCallback(() => {
     try {
       // Busca os times gerados na página de confirmação
-      const timesPartidaString = localStorage.getItem('timesPartida');
+      const timesPartidaString = localStorage.getItem(`timesPartida_${params.id}`);
       console.log('Buscando times da partida:', timesPartidaString);
       
       if (timesPartidaString) {
@@ -108,7 +123,7 @@ export default function Partida() {
     } catch (error) {
       console.error('Erro ao carregar times salvos:', error);
     }
-  }, []);
+  }, [params.id]);
 
   // Carregar times salvos quando o componente montar
   useEffect(() => {
@@ -118,7 +133,7 @@ export default function Partida() {
   // Carregar times do localStorage
   useEffect(() => {
     try {
-      const timesString = localStorage.getItem('timesPartida');
+      const timesString = localStorage.getItem(`timesPartida_${params.id}`);
       if (!timesString) {
         setError('Nenhum time encontrado');
         return;
@@ -138,7 +153,7 @@ export default function Partida() {
       setError('Erro ao carregar times');
       setLoading(false);
     }
-  }, []);
+  }, [params.id]);
 
   // Adiciona listener para sincronização em tempo real do ranking
   useEffect(() => {
@@ -165,45 +180,309 @@ export default function Partida() {
     return 'empate';
   }, [timeA, timeB]);
 
-  // Efeito para o cronômetro (apenas regressivo)
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+  // Definição da função handleFinalizarPartida
+  const handleFinalizarPartida = useCallback(async () => {
+    if (!timeA || !timeB || !params.id || typeof params.id !== 'string') return false;
 
-    if (rodando) {
-      intervalId = setInterval(() => {
-        // Contagem regressiva
-        if (minutos === 0 && segundos === 0) {
-          setRodando(false);
-          setTempoAcabou(true);
-          
-          // Determina o vencedor
-          const vencedor = determinarVencedor();
-          if (!vencedor) return;
-
-          if (vencedor === 'empate') {
-            toast.info('Tempo esgotado! A partida terminou empatada!');
-          } else {
-            toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
-          }
-          return;
-        }
-
-        if (segundos === 0) {
-          setMinutos(m => m - 1);
-          setSegundos(59);
-        } else {
-          setSegundos(s => s - 1);
-        }
-      }, 1000);
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+    try {
+      // Certificar-se de que todos os jogadores têm IDs válidos antes de continuar
+      const jogadoresTimeAValidos = timeA.jogadores.filter(j => (j.id && j.id !== 'undefined') || (j.uid && j.uid !== 'undefined'));
+      const jogadoresTimeBValidos = timeB.jogadores.filter(j => (j.id && j.id !== 'undefined') || (j.uid && j.uid !== 'undefined'));
+      
+      // Atualizar os times com apenas jogadores válidos
+      const timeAValido = { ...timeA, jogadores: jogadoresTimeAValidos };
+      const timeBValido = { ...timeB, jogadores: jogadoresTimeBValidos };
+      
+      // Log para depuração
+      if (timeA.jogadores.length !== jogadoresTimeAValidos.length || 
+          timeB.jogadores.length !== jogadoresTimeBValidos.length) {
+        console.warn('DEBUG: Alguns jogadores com IDs inválidos foram removidos:', {
+          timeA: timeA.jogadores.length - jogadoresTimeAValidos.length,
+          timeB: timeB.jogadores.length - jogadoresTimeBValidos.length
+        });
       }
-    };
-  }, [rodando, minutos, segundos, determinarVencedor]);
+      
+      console.log('DEBUG: Times válidos para calcular ranking:', {
+        timeA: {
+          nome: timeAValido.nome,
+          gols: timeAValido.gols,
+          jogadores: timeAValido.jogadores.map(j => ({ id: j.id, nome: j.nome, gols: j.gols, assistencias: j.assistencias }))
+        },
+        timeB: {
+          nome: timeBValido.nome,
+          gols: timeBValido.gols,
+          jogadores: timeBValido.jogadores.map(j => ({ id: j.id, nome: j.nome, gols: j.gols, assistencias: j.assistencias }))
+        }
+      });
+      
+      const timeAVenceu = (timeAValido.gols ?? 0) > (timeBValido.gols ?? 0);
+      const timeBVenceu = (timeBValido.gols ?? 0) > (timeAValido.gols ?? 0);
+      const empate = (timeAValido.gols ?? 0) === (timeBValido.gols ?? 0);
 
+      // Busca o documento da pelada
+      const peladaRef = doc(db, 'peladas', params.id);
+      const peladaDoc = await getDoc(peladaRef);
+      const peladaData = peladaDoc.data();
+
+      if (!peladaData) {
+        throw new Error('Dados da pelada não encontrados');
+      }
+
+      console.log('DEBUG: Dados originais da pelada:', {
+        peladaId: params.id,
+        rankingExistente: Object.keys(peladaData.ranking || {}).length
+      });
+
+      // Prepara as atualizações do ranking para todos os jogadores
+      const rankingUpdates: { [key: string]: RankingUpdate } = {};
+      // Objeto para armazenar o ranking direto (sem notação de ponto)
+      const rankingDireto: Record<string, RankingUpdate> = {};
+
+      // Processa jogadores do Time A
+      for (const jogador of timeAValido.jogadores) {
+        // Obter o ID válido, priorizando uid se estiver disponível
+        const jogadorId = jogador.uid || jogador.id;
+        if (!jogadorId || jogadorId === 'undefined') {
+          console.warn('DEBUG: Jogador sem ID válido:', jogador.nome);
+          continue;
+        }
+
+        const resultado = timeAVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
+        const golsNum = Number(jogador.gols) || 0;
+        const assistenciasNum = Number(jogador.assistencias) || 0;
+
+        console.log(`DEBUG: Processando jogador do Time A: ${jogador.nome} (${jogadorId})`, {
+          resultado,
+          gols: golsNum,
+          assistencias: assistenciasNum
+        });
+
+        const rankingAtual = peladaData.ranking?.[jogadorId] || {
+          jogos: 0,
+          gols: 0,
+          assistencias: 0,
+          vitorias: 0,
+          derrotas: 0,
+          empates: 0,
+          pontos: 0,
+          nome: jogador.nome
+        };
+
+        console.log(`DEBUG: Ranking atual do jogador ${jogador.nome}:`, rankingAtual);
+
+        // Calcula os pontos com a nova tabela de pontuação
+        const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
+        const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
+        const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
+        const pontosPorGols = golsNum * 2; // +2 por gol
+        const pontosPorAssistencias = assistenciasNum * 1; // +1 por assistência
+        const pontosPorParticipacao = 0.5; // +0.5 por participação
+        
+        const pontosTotais = Math.max(0, (rankingAtual.pontos || 0) + 
+                             pontosPorVitoria + 
+                             pontosPorDerrota + 
+                             pontosPorEmpate + 
+                             pontosPorGols + 
+                             pontosPorAssistencias +
+                             pontosPorParticipacao);
+
+        const novoRanking: RankingUpdate = {
+          jogos: (rankingAtual.jogos || 0) + 1,
+          gols: (rankingAtual.gols || 0) + golsNum,
+          assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
+          vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
+          derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
+          empates: (rankingAtual.empates || 0) + (resultado === 'empate' ? 1 : 0),
+          pontos: pontosTotais,
+          nome: jogador.nome
+        };
+
+        console.log(`DEBUG: Novo ranking do jogador ${jogador.nome}:`, {
+          pontosPorVitoria,
+          pontosPorDerrota,
+          pontosPorEmpate,
+          pontosPorGols,
+          pontosPorAssistencias,
+          pontosPorParticipacao,
+          pontosTotais,
+          novoRanking
+        });
+
+        rankingUpdates[`ranking.${jogadorId}`] = novoRanking;
+        rankingDireto[jogadorId] = novoRanking;
+      }
+
+      // Processa jogadores do Time B
+      for (const jogador of timeBValido.jogadores) {
+        // Obter o ID válido, priorizando uid se estiver disponível
+        const jogadorId = jogador.uid || jogador.id;
+        if (!jogadorId || jogadorId === 'undefined') {
+          console.warn('DEBUG: Jogador sem ID válido:', jogador.nome);
+          continue;
+        }
+
+        const resultado = timeBVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
+        const golsNum = Number(jogador.gols) || 0;
+        const assistenciasNum = Number(jogador.assistencias) || 0;
+
+        console.log(`DEBUG: Processando jogador do Time B: ${jogador.nome} (${jogadorId})`, {
+          resultado,
+          gols: golsNum,
+          assistencias: assistenciasNum
+        });
+
+        const rankingAtual = peladaData.ranking?.[jogadorId] || {
+          jogos: 0,
+          gols: 0,
+          assistencias: 0,
+          vitorias: 0,
+          derrotas: 0,
+          empates: 0,
+          pontos: 0,
+          nome: jogador.nome
+        };
+
+        console.log(`DEBUG: Ranking atual do jogador ${jogador.nome}:`, rankingAtual);
+
+        // Calcula os pontos com a nova tabela de pontuação
+        const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
+        const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
+        const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
+        const pontosPorGols = golsNum * 2; // +2 por gol
+        const pontosPorAssistencias = assistenciasNum * 1; // +1 por assistência
+        const pontosPorParticipacao = 0.5; // +0.5 por participação
+        
+        const pontosTotais = Math.max(0, (rankingAtual.pontos || 0) + 
+                             pontosPorVitoria + 
+                             pontosPorDerrota + 
+                             pontosPorEmpate + 
+                             pontosPorGols + 
+                             pontosPorAssistencias +
+                             pontosPorParticipacao);
+
+        const novoRanking: RankingUpdate = {
+          jogos: (rankingAtual.jogos || 0) + 1,
+          gols: (rankingAtual.gols || 0) + golsNum,
+          assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
+          vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
+          derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
+          empates: (rankingAtual.empates || 0) + (resultado === 'empate' ? 1 : 0),
+          pontos: pontosTotais,
+          nome: jogador.nome
+        };
+
+        console.log(`DEBUG: Novo ranking do jogador ${jogador.nome}:`, {
+          pontosPorVitoria,
+          pontosPorDerrota,
+          pontosPorEmpate,
+          pontosPorGols,
+          pontosPorAssistencias,
+          pontosPorParticipacao,
+          pontosTotais,
+          novoRanking
+        });
+
+        rankingUpdates[`ranking.${jogadorId}`] = novoRanking;
+        rankingDireto[jogadorId] = novoRanking;
+      }
+
+      console.log('DEBUG: Atualizações do ranking preparadas:', Object.keys(rankingUpdates).length, 'jogadores');
+      
+      // Verifica se há alguma atualização para ser feita
+      if (Object.keys(rankingUpdates).length === 0) {
+        console.error('DEBUG: Nenhuma atualização de ranking para enviar!');
+        toast.error('Não foi possível atualizar o ranking: nenhum jogador válido');
+        return false;
+      }
+
+      // Adicionar o historico ao objeto de atualizações
+      const updatesWithHistory = {
+        ...rankingUpdates,
+        historico: arrayUnion({
+          data: new Date(),
+          timeA: {
+            ...timeAValido,
+            venceu: timeAVenceu,
+          },
+          timeB: {
+            ...timeBValido,
+            venceu: timeBVenceu,
+          },
+          empate: empate
+        })
+      };
+
+      console.log('DEBUG: Enviando atualizações para o Firestore...');
+      
+      // Salva o resultado da partida e atualiza o ranking em uma única operação
+      await updateDoc(peladaRef, updatesWithHistory);
+
+      // Segunda tentativa - atualizar apenas o ranking usando o objeto direto
+      try {
+        console.log('DEBUG: Tentando segunda atualização usando objeto direto...');
+        await updateDoc(peladaRef, { 
+          ranking: rankingDireto 
+        });
+        console.log('DEBUG: Segunda atualização concluída com sucesso');
+      } catch (err) {
+        console.error('DEBUG: Erro na segunda tentativa:', err);
+      }
+
+      // Verifica se o ranking foi realmente atualizado
+      const peladaAposAtualizacao = await getDoc(peladaRef);
+      if (peladaAposAtualizacao.exists()) {
+        const dataAposAtualizacao = peladaAposAtualizacao.data();
+        console.log('DEBUG: Verificação pós-atualização:', {
+          rankingAposAtualizacao: Object.keys(dataAposAtualizacao.ranking || {}).length,
+          primeirosJogadores: Object.entries(dataAposAtualizacao.ranking || {})
+            .slice(0, 3)
+            .map(([id, data]) => ({ id, pontos: (data as RankingData).pontos }))
+        });
+        
+        // CORREÇÃO: Atualizar diretamente o ranking para cada jogador
+        // Isso garante que os updates não sejam mesclados incorretamente
+        if (Object.keys(rankingUpdates).length > 0) {
+          // Definir o tipo corretamente para evitar erros de tipo
+          const rankingFinal: Record<string, RankingData> = {};
+          
+          // Cria um objeto com o ranking completo
+          if (dataAposAtualizacao.ranking) {
+            // Copiar os dados do ranking atual
+            Object.entries(dataAposAtualizacao.ranking).forEach(([key, value]) => {
+              rankingFinal[key] = value as RankingData;
+            });
+            
+            // Aplicar os updates do ranking atual
+            Object.entries(rankingUpdates).forEach(([key, value]) => {
+              const jogadorId = key.replace('ranking.', '');
+              rankingFinal[jogadorId] = value;
+            });
+            
+            // Atualiza o documento com o ranking completo de uma vez
+            try {
+              console.log('DEBUG: Realizando atualização de ranking final...');
+              await updateDoc(peladaRef, {
+                ranking: rankingFinal
+              });
+              console.log('DEBUG: Ranking final atualizado com sucesso!');
+            } catch (updateError) {
+              console.error('DEBUG: Erro na atualização final do ranking:', updateError);
+            }
+          }
+        }
+      }
+
+      console.log('DEBUG: Ranking atualizado com sucesso!');
+      toast.success('Ranking atualizado com sucesso!');
+      return true;
+    } catch (error) {
+      console.error('Erro ao finalizar partida:', error);
+      toast.error('Erro ao atualizar o ranking');
+      return false;
+    }
+  }, [timeA, timeB, params.id]);
+  
+  // Funções de manipulação
   const handleGol = useCallback((timeId: number, jogadorId: string, incremento: boolean = true) => {
     const time = timeId === 1 ? timeA : timeB;
     if (!time) return;
@@ -212,7 +491,9 @@ export default function Partida() {
       ...time,
       gols: incremento ? (time.gols + 1) : Math.max(0, time.gols - 1),
       jogadores: time.jogadores.map((j: Jogador) => {
-        if (j.id === jogadorId) {
+        // Verifica tanto id quanto uid
+        const idMatch = j.id === jogadorId || j.uid === jogadorId;
+        if (idMatch) {
           return {
             ...j,
             gols: incremento ? (j.gols + 1) : Math.max(0, j.gols - 1)
@@ -236,7 +517,9 @@ export default function Partida() {
     const novoTime: Time = {
       ...time,
       jogadores: time.jogadores.map((j: Jogador) => {
-        if (j.id === jogadorId) {
+        // Verifica tanto id quanto uid
+        const idMatch = j.id === jogadorId || j.uid === jogadorId;
+        if (idMatch) {
           return {
             ...j,
             assistencias: incremento ? (j.assistencias + 1) : Math.max(0, j.assistencias - 1)
@@ -300,159 +583,60 @@ export default function Partida() {
     }
   };
 
-  const handleFinalizarPartida = async () => {
-    if (!timeA || !timeB || !params.id || typeof params.id !== 'string') return false;
+  // Atualiza a referência sempre que a função mudar
+  useEffect(() => {
+    finalizarPartidaRef.current = handleFinalizarPartida;
+  }, [handleFinalizarPartida]);
 
-    try {
-      const timeAVenceu = (timeA.gols ?? 0) > (timeB.gols ?? 0);
-      const timeBVenceu = (timeB.gols ?? 0) > (timeA.gols ?? 0);
-      const empate = (timeA.gols ?? 0) === (timeB.gols ?? 0);
+  // Efeito para o cronômetro (apenas regressivo)
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
 
-      // Atualiza o ranking de cada jogador do Time A
-      for (const jogador of timeA.jogadores) {
-        const resultado = timeAVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
-        await atualizarRankingJogador(
-          jogador.id,
-          jogador.gols || 0,
-          jogador.assistencias || 0,
-          resultado
-        );
-      }
+    if (rodando) {
+      intervalId = setInterval(() => {
+        // Contagem regressiva
+        if (minutos === 0 && segundos === 0) {
+          setRodando(false);
+          setTempoAcabou(true);
+          
+          // Determina o vencedor
+          const vencedor = determinarVencedor();
+          if (!vencedor) return;
 
-      // Atualiza o ranking de cada jogador do Time B
-      for (const jogador of timeB.jogadores) {
-        const resultado = timeBVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
-        await atualizarRankingJogador(
-          jogador.id,
-          jogador.gols || 0,
-          jogador.assistencias || 0,
-          resultado
-        );
-      }
+          if (vencedor === 'empate') {
+            toast('Tempo esgotado! A partida terminou empatada!');
+          } else {
+            toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
+          }
+          
+          // Atualiza automaticamente o ranking quando o tempo acabar
+          finalizarPartidaRef.current().then(success => {
+            if (success) {
+              toast.success('Ranking atualizado automaticamente!');
+            }
+          }).catch(error => {
+            console.error('Erro ao atualizar ranking automaticamente:', error);
+            toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
+          });
+          
+          return;
+        }
 
-      // Salva o resultado da partida no histórico
-      const peladaRef = doc(db, 'peladas', params.id);
-      const historicoPartida = {
-        data: new Date(),
-        timeA: {
-          ...timeA,
-          venceu: timeAVenceu,
-        },
-        timeB: {
-          ...timeB,
-          venceu: timeBVenceu,
-        },
-        empate: empate
-      };
-
-      await updateDoc(peladaRef, {
-        historico: arrayUnion(historicoPartida)
-      });
-
-      // Verifica se o ranking foi atualizado corretamente
-      const peladaDoc = await getDoc(peladaRef);
-      const peladaData = peladaDoc.data() as PeladaData | undefined;
-      
-      if (!peladaData?.ranking) {
-        throw new Error('Ranking não encontrado após atualização');
-      }
-
-      console.log('Ranking após atualização:', peladaData.ranking);
-      toast.success('Ranking atualizado com sucesso!');
-      return true;
-    } catch (error) {
-      console.error('Erro ao finalizar partida:', error);
-      toast.error('Erro ao atualizar o ranking');
-      return false;
+        if (segundos === 0) {
+          setMinutos(m => m - 1);
+          setSegundos(59);
+        } else {
+          setSegundos(s => s - 1);
+        }
+      }, 1000);
     }
-  };
 
-  const atualizarRankingJogador = async (
-    jogadorId: string,
-    gols: number,
-    assistencias: number,
-    resultado: 'vitoria' | 'empate' | 'derrota'
-  ) => {
-    try {
-      if (!params.id || typeof params.id !== 'string') {
-        throw new Error('ID da pelada não encontrado');
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
       }
-
-      const peladaRef = doc(db, 'peladas', params.id);
-      const peladaDoc = await getDoc(peladaRef);
-      const peladaData = peladaDoc.data();
-
-      if (!peladaData) {
-        throw new Error('Dados da pelada não encontrados');
-      }
-
-      // Encontra o nome do jogador no time atual
-      const jogador = [...(timeA?.jogadores || []), ...(timeB?.jogadores || [])].find(j => j.id === jogadorId);
-      if (!jogador) {
-        throw new Error('Jogador não encontrado nos times atuais');
-      }
-
-      // Garante que os valores são números
-      const golsNum = Number(gols) || 0;
-      const assistenciasNum = Number(assistencias) || 0;
-
-      const rankingAtual = peladaData.ranking?.[jogadorId] || {
-        jogos: 0,
-        gols: 0,
-        assistencias: 0,
-        vitorias: 0,
-        derrotas: 0,
-        empates: 0,
-        pontos: 0,
-        nome: jogador.nome
-      };
-
-      // Calcula os pontos
-      const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
-      const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
-      const pontosPorGols = golsNum * 5;
-      const pontosPorAssistencias = assistenciasNum * 4;
-
-      // Calcula o total de pontos somando os pontos anteriores com os novos
-      const pontosTotais = (rankingAtual.pontos || 0) + pontosPorVitoria + pontosPorEmpate + pontosPorGols + pontosPorAssistencias;
-
-      const novosValores = {
-        jogos: (rankingAtual.jogos || 0) + 1,
-        gols: (rankingAtual.gols || 0) + golsNum,
-        assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
-        vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
-        derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
-        empates: (rankingAtual.empates || 0) + (resultado === 'empate' ? 1 : 0),
-        pontos: pontosTotais,
-        nome: jogador.nome
-      };
-
-      console.log('Atualizando ranking do jogador:', {
-        jogador: jogador.nome,
-        id: jogadorId,
-        rankingAntigo: rankingAtual,
-        novosValores,
-        gols: golsNum,
-        assistencias: assistenciasNum,
-        resultado,
-        pontosPorVitoria,
-        pontosPorEmpate,
-        pontosPorGols,
-        pontosPorAssistencias,
-        pontosTotais
-      });
-
-      // Atualiza o ranking no documento da pelada
-      await updateDoc(peladaRef, {
-        [`ranking.${jogadorId}`]: novosValores
-      });
-
-      return novosValores;
-    } catch (error) {
-      console.error('Erro ao atualizar ranking:', error);
-      throw error;
-    }
-  };
+    };
+  }, [rodando, minutos, segundos, determinarVencedor]);
 
   const handleOpenModal = async () => {
     try {
@@ -466,7 +650,7 @@ export default function Partida() {
       }
 
       // Busca os times gerados da página anterior
-      const timesGeradosString = localStorage.getItem('timesGerados');
+      const timesGeradosString = localStorage.getItem(`timesGerados_${params.id}`);
       if (timesGeradosString) {
         const timesGerados = JSON.parse(timesGeradosString) as Time[];
         console.log('Times gerados encontrados:', timesGerados);
@@ -579,11 +763,24 @@ export default function Partida() {
         return;
       }
 
+      // Filtra jogadores com IDs inválidos
+      const jogadoresTimeAValidos = novoTimeA.jogadores.filter(j => j.id && j.id !== 'undefined');
+      const jogadoresTimeBValidos = novoTimeB.jogadores.filter(j => j.id && j.id !== 'undefined');
+
+      // Log para depuração se jogadores foram removidos
+      if (novoTimeA.jogadores.length !== jogadoresTimeAValidos.length || 
+          novoTimeB.jogadores.length !== jogadoresTimeBValidos.length) {
+        console.warn('DEBUG: Alguns jogadores com IDs inválidos foram removidos ao salvar times:', {
+          timeA: novoTimeA.jogadores.length - jogadoresTimeAValidos.length,
+          timeB: novoTimeB.jogadores.length - jogadoresTimeBValidos.length
+        });
+      }
+
       // Reseta os gols e assistências dos times selecionados
       const timeAResetado = {
         ...novoTimeA,
         gols: 0,
-        jogadores: novoTimeA.jogadores.map(j => ({
+        jogadores: jogadoresTimeAValidos.map(j => ({
           ...j,
           gols: 0,
           assistencias: 0
@@ -593,7 +790,7 @@ export default function Partida() {
       const timeBResetado = {
         ...novoTimeB,
         gols: 0,
-        jogadores: novoTimeB.jogadores.map(j => ({
+        jogadores: jogadoresTimeBValidos.map(j => ({
           ...j,
           gols: 0,
           assistencias: 0
@@ -602,7 +799,7 @@ export default function Partida() {
 
       // Salva os times selecionados para a partida
       const timesPartida = [timeAResetado, timeBResetado];
-      localStorage.setItem('timesPartida', JSON.stringify(timesPartida));
+      localStorage.setItem(`timesPartida_${params.id}`, JSON.stringify(timesPartida));
 
       // Reseta estados
       setMinutos(25);
@@ -792,17 +989,20 @@ export default function Partida() {
             {timeA?.nome}
           </h2>
           <div className="space-y-4">
-            {timeA?.jogadores.map((jogador: Jogador) => (
-              <div key={jogador.id} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
+            {timeA?.jogadores.map((jogador: Jogador, index: number) => {
+              // Usar uid ou id, o que estiver disponível
+              const jogadorKey = jogador.uid || jogador.id || `index-${index}`;
+              return (
+                <div key={`timeA-${jogadorKey}`} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
                 <div className="font-medium">{jogador.nome}</div>
                 <div className="flex justify-between items-center text-sm">
                   <div className="flex items-center gap-2">
                     <span>G: {jogador.gols}</span>
                     <div className="flex gap-1">
-                      <IconButton size="small" onClick={() => handleGol(1, jogador.id, true)}>
+                        <IconButton size="small" onClick={() => handleGol(1, jogadorKey, true)}>
                         <AddIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleGol(1, jogador.id, false)}>
+                        <IconButton size="small" onClick={() => handleGol(1, jogadorKey, false)}>
                         <RemoveIcon fontSize="small" />
                       </IconButton>
                     </div>
@@ -810,17 +1010,18 @@ export default function Partida() {
                   <div className="flex items-center gap-2">
                     <span>A: {jogador.assistencias}</span>
                     <div className="flex gap-1">
-                      <IconButton size="small" onClick={() => handleAssistencia(1, jogador.id, true)}>
+                        <IconButton size="small" onClick={() => handleAssistencia(1, jogadorKey, true)}>
                         <AddIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleAssistencia(1, jogador.id, false)}>
+                        <IconButton size="small" onClick={() => handleAssistencia(1, jogadorKey, false)}>
                         <RemoveIcon fontSize="small" />
                       </IconButton>
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -830,17 +1031,20 @@ export default function Partida() {
             {timeB?.nome}
           </h2>
           <div className="space-y-4">
-            {timeB?.jogadores.map((jogador: Jogador) => (
-              <div key={jogador.id} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
+            {timeB?.jogadores.map((jogador: Jogador, index: number) => {
+              // Usar uid ou id, o que estiver disponível
+              const jogadorKey = jogador.uid || jogador.id || `index-${index}`;
+              return (
+                <div key={`timeB-${jogadorKey}`} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
                 <div className="font-medium">{jogador.nome}</div>
                 <div className="flex justify-between items-center text-sm">
                   <div className="flex items-center gap-2">
                     <span>G: {jogador.gols}</span>
                     <div className="flex gap-1">
-                      <IconButton size="small" onClick={() => handleGol(2, jogador.id, true)}>
+                        <IconButton size="small" onClick={() => handleGol(2, jogadorKey, true)}>
                         <AddIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleGol(2, jogador.id, false)}>
+                        <IconButton size="small" onClick={() => handleGol(2, jogadorKey, false)}>
                         <RemoveIcon fontSize="small" />
                       </IconButton>
                     </div>
@@ -848,17 +1052,18 @@ export default function Partida() {
                   <div className="flex items-center gap-2">
                     <span>A: {jogador.assistencias}</span>
                     <div className="flex gap-1">
-                      <IconButton size="small" onClick={() => handleAssistencia(2, jogador.id, true)}>
+                        <IconButton size="small" onClick={() => handleAssistencia(2, jogadorKey, true)}>
                         <AddIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleAssistencia(2, jogador.id, false)}>
+                        <IconButton size="small" onClick={() => handleAssistencia(2, jogadorKey, false)}>
                         <RemoveIcon fontSize="small" />
                       </IconButton>
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -902,8 +1107,8 @@ export default function Partida() {
                     <span>{time.nome}</span>
                   </div>
                   <div className="space-y-1">
-                    {time.jogadores.map(jogador => (
-                      <div key={jogador.id} className="text-sm text-gray-600">
+                    {time.jogadores.map((jogador, index) => (
+                      <div key={`modal-time-${time.id}-jogador-${index}`} className="text-sm text-gray-600">
                         {jogador.nome}
                       </div>
                     ))}

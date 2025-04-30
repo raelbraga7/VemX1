@@ -1,38 +1,8 @@
 import { db } from './config';
 import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, getDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { auth } from './config';
-import { addPeladaToUser } from './userService';
-
-export interface Jogador {
-  uid: string;
-  nome: string;
-  email: string;
-  photoURL?: string;
-  dataConfirmacao?: string;
-}
-
-export interface RankingPlayer {
-  jogos: number;
-  vitorias: number;
-  derrotas: number;
-  empates: number;
-  gols: number;
-  assistencias: number;
-  pontos: number;
-}
-
-export interface PeladaData {
-  nome: string;
-  descricao: string;
-  ownerId: string;
-  players: string[];
-  ranking: { [key: string]: RankingPlayer };
-  createdAt: Date;
-  quantidadeTimes: number;
-  jogadoresPorTime: number;
-  coresTimes: string[];
-  confirmados: Jogador[];
-}
+import { addPeladaToUser, getUserById } from './userService';
+import { Jogador, PeladaData, RankingPlayer } from '@/types/pelada';
 
 export interface Pelada {
   id: string;
@@ -43,13 +13,15 @@ export interface Pelada {
   status: string;
 }
 
+export type { PeladaData } from '@/types/pelada';
+
 /**
  * Cria uma nova pelada no Firestore
  * @param peladaData Dados da pelada
  * @returns ID da pelada criada
  * @throws Erro se o usuário não estiver autenticado ou ocorrer algum problema
  */
-export const criarPelada = async (peladaData: PeladaData): Promise<string> => {
+export const criarPelada = async (peladaData: Omit<PeladaData, 'id'>): Promise<string> => {
   try {
     // Verifica se o usuário está autenticado
     if (!auth.currentUser) {
@@ -62,32 +34,96 @@ export const criarPelada = async (peladaData: PeladaData): Promise<string> => {
       throw new Error("Nome da pelada é obrigatório");
     }
 
-    // Garante que os arrays existam e que o owner esteja na lista de players
+    // Busca os dados do dono para inicializar o ranking
+    const ownerData = await getUserById(peladaData.ownerId);
+    if (!ownerData) {
+      throw new Error("Dados do dono não encontrados");
+    }
+
+    // Garante que os arrays existam
+    const players = [...new Set([...(peladaData.players || []), peladaData.ownerId])];
+    const confirmados = Array.isArray(peladaData.confirmados) ? peladaData.confirmados : [];
+    const ranking: { [key: string]: RankingPlayer } = {};
+
+    // Inicializa o ranking para todos os jogadores
+    for (const playerId of players) {
+      try {
+        const userData = await getUserById(playerId);
+        if (userData) {
+          ranking[playerId] = {
+            jogos: 0,
+            vitorias: 0,
+            derrotas: 0,
+            empates: 0,
+            gols: 0,
+            assistencias: 0,
+            pontos: 0,
+            nome: userData.nome
+          };
+
+          // Adiciona APENAS o dono da pelada aos confirmados automaticamente
+          if (playerId === peladaData.ownerId) {
+            const jaConfirmado = confirmados.some(j => j.uid === playerId);
+            if (!jaConfirmado) {
+              const novoJogador: Jogador = {
+                uid: playerId,
+                nome: userData.nome,
+                email: userData.email,
+                dataConfirmacao: new Date().toISOString()
+              };
+              if (userData.photoURL) {
+                novoJogador.photoURL = userData.photoURL;
+              }
+              confirmados.push(novoJogador);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Erro ao buscar dados do jogador ${playerId}:`, error);
+      }
+    }
+
     const dadosParaSalvar = {
       ...peladaData,
       createdAt: new Date(),
-      players: [...(peladaData.players || []), peladaData.ownerId],
-      confirmados: peladaData.confirmados || [],
-      ranking: peladaData.ranking || {}
+      players,
+      confirmados,
+      ranking,
+      quantidadeTimes: peladaData.quantidadeTimes || 2,
+      jogadoresPorTime: peladaData.jogadoresPorTime || 5,
+      coresTimes: peladaData.coresTimes || ['#1E90FF', '#FF4444'],
+      nome: peladaData.nome.trim(),
+      descricao: peladaData.descricao?.trim() || '',
+      ownerId: peladaData.ownerId
     };
 
     console.log('Criando pelada com dados:', {
       nome: dadosParaSalvar.nome,
       ownerId: dadosParaSalvar.ownerId,
       players: dadosParaSalvar.players,
-      confirmados: dadosParaSalvar.confirmados
+      confirmados: dadosParaSalvar.confirmados,
+      ranking: dadosParaSalvar.ranking,
+      quantidadeTimes: dadosParaSalvar.quantidadeTimes,
+      jogadoresPorTime: dadosParaSalvar.jogadoresPorTime
     });
 
     // Cria a pelada no Firestore
     const peladaRef = await addDoc(collection(db, 'peladas'), dadosParaSalvar);
+    const peladaId = peladaRef.id;
+    
+    // Atualiza o documento com o campo id
+    await updateDoc(peladaRef, { id: peladaId });
+
+    // Adiciona a pelada para cada jogador
+    await Promise.all(players.map(playerId => addPeladaToUser(playerId, peladaId)));
 
     console.log('Pelada criada com sucesso:', {
-      id: peladaRef.id,
-      dados: dadosParaSalvar
+      id: peladaId,
+      totalJogadores: players.length,
+      totalConfirmados: confirmados.length
     });
 
-    // Retorna o ID da pelada criada
-    return peladaRef.id;
+    return peladaId;
   } catch (error) {
     console.error('Erro detalhado ao criar pelada:', {
       error,
@@ -139,7 +175,13 @@ export const getPelada = async (peladaId: string): Promise<PeladaData> => {
     throw new Error('Pelada não encontrada');
   }
   
-  return peladaSnap.data() as PeladaData;
+  const data = peladaSnap.data();
+  
+  // Garante que o id esteja definido
+  return {
+    ...data,
+    id: peladaId
+  } as PeladaData;
 };
 
 export const getPeladasByUser = async (userId: string): Promise<{ id: string; data: PeladaData }[]> => {
@@ -183,29 +225,6 @@ export const buscarPeladaMaisRecente = async (userId: string): Promise<{ id: str
   }
 };
 
-export const addPlayerToPelada = async (peladaId: string, playerId: string): Promise<void> => {
-  try {
-    const peladaRef = doc(db, 'peladas', peladaId);
-    const peladaDoc = await getDoc(peladaRef);
-    
-    if (!peladaDoc.exists()) {
-      throw new Error('Pelada não encontrada');
-    }
-
-    const peladaData = peladaDoc.data() as PeladaData;
-    
-    // Verifica se o jogador já está na lista
-    if (!peladaData.players.includes(playerId)) {
-      await updateDoc(peladaRef, {
-        players: [...peladaData.players, playerId]
-      });
-    }
-  } catch (error) {
-    console.error('Erro ao adicionar jogador à pelada:', error);
-    throw error;
-  }
-};
-
 export const adicionarJogadorPelada = async (peladaId: string, jogadorId: string): Promise<void> => {
   try {
     console.log('Adicionando jogador à pelada:', {
@@ -213,6 +232,10 @@ export const adicionarJogadorPelada = async (peladaId: string, jogadorId: string
       jogadorId
     });
 
+    if (!peladaId || !jogadorId) {
+      throw new Error('PeladaId e jogadorId são obrigatórios');
+    }
+
     const peladaRef = doc(db, 'peladas', peladaId);
     const peladaDoc = await getDoc(peladaRef);
 
@@ -221,10 +244,31 @@ export const adicionarJogadorPelada = async (peladaId: string, jogadorId: string
     }
 
     const peladaData = peladaDoc.data() as PeladaData;
+    
+    // Busca os dados do jogador
+    const userData = await getUserById(jogadorId);
+    if (!userData) {
+      throw new Error('Dados do jogador não encontrados');
+    }
+
     const players = peladaData.players || [];
     const ranking = peladaData.ranking || {};
+    const confirmados = Array.isArray(peladaData.confirmados) ? peladaData.confirmados : [];
 
-    if (!players.includes(jogadorId)) {
+    // Verifica se o jogador já está confirmado
+    const jaConfirmado = confirmados.some(jogador => jogador.uid === jogadorId);
+    
+    // CORREÇÃO: Removemos a verificação de limite de jogadores confirmados
+    // Vamos manter apenas o limite de jogadores no ranking (30 por dono)
+    // O limite de jogadores confirmados será gerenciado na tela de confirmação
+    
+    // Verifica o limite de jogadores no ranking (máximo 30 por dono)
+    const LIMITE_RANKING_POR_DONO = 30;
+    if (!ranking[jogadorId] && Object.keys(ranking).length >= LIMITE_RANKING_POR_DONO) {
+      throw new Error(`Limite máximo de jogadores no ranking atingido (${LIMITE_RANKING_POR_DONO} jogadores)`);
+    }
+    
+    if (!players.includes(jogadorId) || !jaConfirmado) {
       console.log('Adicionando novo jogador à lista:', jogadorId);
       
       // Inicializa o ranking do jogador se não existir
@@ -236,14 +280,41 @@ export const adicionarJogadorPelada = async (peladaId: string, jogadorId: string
           empates: 0,
           gols: 0,
           assistencias: 0,
-          pontos: 0
+          pontos: 0,
+          nome: userData.nome
         };
       }
 
-      await updateDoc(peladaRef, {
-        players: [...players, jogadorId],
-        ranking: ranking
-      });
+      // Prepara o objeto do jogador confirmado
+      const novoJogador: Jogador = {
+        uid: jogadorId,
+        nome: userData.nome,
+        email: userData.email,
+        dataConfirmacao: new Date().toISOString()
+      };
+
+      // Adiciona photoURL apenas se existir
+      if (userData.photoURL) {
+        novoJogador.photoURL = userData.photoURL;
+      }
+
+      // Prepara os dados para atualização
+      const updateData: Partial<PeladaData> = {
+        ranking
+      };
+
+      // Adiciona o jogador à lista de players se ainda não estiver
+      if (!players.includes(jogadorId)) {
+        updateData.players = [...players, jogadorId];
+      }
+
+      // NÃO adicionar automaticamente aos confirmados
+      // O jogador deve confirmar manualmente clicando no botão de confirmação
+
+      console.log('Dados para atualização:', updateData);
+
+      // Atualiza a pelada
+      await updateDoc(peladaRef, updateData);
 
       // Adiciona a pelada ao usuário
       await addPeladaToUser(jogadorId, peladaId);
@@ -251,10 +322,10 @@ export const adicionarJogadorPelada = async (peladaId: string, jogadorId: string
       console.log('Jogador adicionado com sucesso:', {
         peladaId,
         jogadorId,
-        totalJogadores: players.length + 1
+        totalJogadores: updateData.players?.length || players.length + 1
       });
     } else {
-      console.log('Jogador já está na pelada:', jogadorId);
+      console.log('Jogador já está na pelada e confirmado:', jogadorId);
     }
   } catch (error) {
     console.error('Erro ao adicionar jogador à pelada:', {
@@ -306,8 +377,8 @@ export const removerJogadorPelada = async (peladaId: string, jogadorId: string):
     const rankingAtualizado = { ...peladaData.ranking };
     delete rankingAtualizado[jogadorId];
 
-    // Remove o jogador da lista de confirmados
-    const confirmadosAtualizados = peladaData.confirmados.filter(j => j.nome !== jogadorId);
+    // Remove o jogador da lista de confirmados usando o uid
+    const confirmadosAtualizados = peladaData.confirmados.filter(jogador => jogador.uid !== jogadorId);
 
     // Atualiza a pelada
     await updateDoc(peladaRef, {
@@ -333,6 +404,69 @@ export const removerJogadorPelada = async (peladaId: string, jogadorId: string):
 };
 
 export const atualizarPelada = async (peladaId: string, updates: Partial<PeladaData>): Promise<void> => {
-  const peladaRef = doc(db, 'peladas', peladaId);
-  await updateDoc(peladaRef, updates);
+  try {
+    console.log('Atualizando pelada:', {
+      peladaId,
+      campos: Object.keys(updates)
+    });
+    
+    // Verifica se a pelada existe
+    const peladaRef = doc(db, 'peladas', peladaId);
+    const peladaDoc = await getDoc(peladaRef);
+    
+    if (!peladaDoc.exists()) {
+      throw new Error('Pelada não encontrada');
+    }
+    
+    const peladaAtual = peladaDoc.data() as PeladaData;
+    
+    // CORREÇÃO: Em vez de sobrescrever, vamos garantir que os dados críticos sejam preservados
+    // e apenas os campos específicos da atualização sejam alterados
+    
+    // Criamos um objeto de atualização que mantém a estrutura original
+    const updateData: Partial<PeladaData> = {};
+    
+    // Adicionamos apenas os campos que foram especificados no objeto 'updates'
+    Object.keys(updates).forEach(key => {
+      // @ts-expect-error - campo dinâmico
+      updateData[key] = updates[key];
+    });
+    
+    // IMPORTANTE: Verificar explicitamente se campos críticos estão sendo sobrescritos
+    // e garantir que os dados existentes sejam preservados corretamente
+    
+    // Se os campos críticos não forem explicitamente atualizados, usamos os valores existentes
+    if (!updateData.players) {
+      updateData.players = peladaAtual.players || [];
+    }
+    
+    if (!updateData.ranking) {
+      updateData.ranking = peladaAtual.ranking || {};
+    }
+    
+    if (!updateData.confirmados) {
+      updateData.confirmados = peladaAtual.confirmados || [];
+    }
+    
+    console.log('Dados finais para atualização:', {
+      totalPlayers: updateData.players.length,
+      totalRanking: Object.keys(updateData.ranking).length,
+      totalConfirmados: updateData.confirmados.length
+    });
+    
+    // Atualiza a pelada no Firestore com a estrutura completa
+    await updateDoc(peladaRef, updateData);
+    console.log('Pelada atualizada com sucesso');
+    
+    // Armazena no localStorage para acesso rápido
+    localStorage.setItem(`pelada_${peladaId}`, JSON.stringify({
+      ...peladaAtual,
+      ...updateData,
+      id: peladaId
+    }));
+    
+  } catch (error) {
+    console.error('Erro ao atualizar pelada:', error);
+    throw error;
+  }
 }; 

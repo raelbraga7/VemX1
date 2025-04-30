@@ -4,9 +4,15 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/firebase/config';
-import { useInvite } from '@/hooks/useInvite';
 import { createUser } from '@/firebase/userService';
 import Link from 'next/link';
+
+interface Jogador {
+  id: string;
+  nome: string;
+  gols: number;
+  assistencias: number;
+}
 
 export default function Cadastro() {
   const [email, setEmail] = useState('');
@@ -17,39 +23,89 @@ export default function Cadastro() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const peladaId = searchParams.get('peladaId');
-  const { acceptInvite } = useInvite();
+  const convidadoPor = searchParams.get('convidadoPor');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validação de campos vazios
+    if (!email || !password || !nome) {
+      setError('Todos os campos são obrigatórios');
+      return;
+    }
+
+    // Validação de formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Por favor, insira um email válido');
+      return;
+    }
+
+    // Validação de força da senha
+    if (password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    // Validação de nome
+    if (nome.trim().length < 3) {
+      setError('O nome deve ter pelo menos 3 caracteres');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
+      console.log('Iniciando cadastro...', { email, nome, peladaId, convidadoPor });
+      
       // Criar usuário com email e senha
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('Usuário criado no Firebase Auth:', userCredential.user.uid);
       
-      // Criar perfil do usuário no Firestore
-      await createUser(userCredential.user.uid, nome, email);
+      // Criar perfil do usuário no Firestore com informação de convite
+      await createUser(userCredential.user.uid, nome.trim(), email, convidadoPor || undefined);
+      console.log('Perfil do usuário criado no Firestore');
+
+      // Fazer logout para garantir que o usuário faça login novamente
+      await auth.signOut();
       
-      // Se tiver um peladaId na URL, processa o convite
+      // Redirecionar para a página de login com mensagem de sucesso
       if (peladaId) {
-        await acceptInvite(peladaId);
-        return; // O redirecionamento será feito pelo acceptInvite
+        router.push(`/login?peladaId=${peladaId}&cadastroSucesso=true${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+      } else {
+        router.push('/login?cadastroSucesso=true');
       }
-      
-      router.push('/dashboard');
     } catch (err: unknown) {
-      console.error('Erro no cadastro:', err);
+      console.error('Erro detalhado no cadastro:', err);
       let mensagemErro = 'Erro ao criar conta. Tente novamente.';
       
       // Traduzir mensagens de erro do Firebase
       const firebaseError = err as { code: string };
-      if (firebaseError.code === 'auth/email-already-in-use') {
-        mensagemErro = 'Este email já está em uso.';
-      } else if (firebaseError.code === 'auth/invalid-email') {
-        mensagemErro = 'Email inválido.';
-      } else if (firebaseError.code === 'auth/weak-password') {
-        mensagemErro = 'A senha deve ter pelo menos 6 caracteres.';
+      console.log('Código do erro:', firebaseError.code);
+      
+      switch (firebaseError.code) {
+        case 'auth/email-already-in-use':
+          mensagemErro = 'Este email já está em uso. Por favor, use outro email ou faça login.';
+          break;
+        case 'auth/invalid-email':
+          mensagemErro = 'O formato do email é inválido. Por favor, verifique e tente novamente.';
+          break;
+        case 'auth/weak-password':
+          mensagemErro = 'A senha é muito fraca. Use pelo menos 6 caracteres, incluindo letras e números.';
+          break;
+        case 'auth/network-request-failed':
+          mensagemErro = 'Erro de conexão. Verifique sua internet e tente novamente.';
+          break;
+        case 'auth/operation-not-allowed':
+          mensagemErro = 'O cadastro com email e senha está desabilitado. Entre em contato com o suporte.';
+          break;
+        case 'auth/too-many-requests':
+          mensagemErro = 'Muitas tentativas de cadastro. Por favor, aguarde alguns minutos e tente novamente.';
+          break;
+        default:
+          mensagemErro = `Erro ao criar conta. Por favor, tente novamente mais tarde. (${firebaseError.code})`;
+          break;
       }
       
       setError(mensagemErro);

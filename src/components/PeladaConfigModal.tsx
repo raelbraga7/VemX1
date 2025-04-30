@@ -1,18 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { Dialog } from '@headlessui/react';
-import { auth } from '@/firebase/config';
-import { criarPelada } from '@/firebase/peladaService';
-import { doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 
 interface PeladaConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (peladaId: string) => void;
-  mode?: 'create' | 'configure';
   peladaId?: string;
 }
 
@@ -22,19 +19,68 @@ const coresPadrao = [
   '#16a34a', // Verde
   '#ca8a04', // Amarelo
   '#9333ea', // Roxo
-  '#0891b2', // Ciano
+  '#ff7600', // Laranja
   '#be123c', // Rosa
   '#78350f'  // Marrom
 ];
 
-export default function PeladaConfigModal({ isOpen, onClose, onSave, mode = 'create', peladaId }: PeladaConfigModalProps) {
+export default function PeladaConfigModal({ isOpen, onClose, onSave, peladaId }: PeladaConfigModalProps) {
   const router = useRouter();
-  const [nomePelada, setNomePelada] = useState('');
-  const [quantidadeTimes, setQuantidadeTimes] = useState(2);
-  const [jogadoresPorTime, setJogadoresPorTime] = useState(5);
-  const [coresTimes, setCoresTimes] = useState<string[]>(coresPadrao.slice(0, 2));
+  const [activeTab, setActiveTab] = useState('pelada');
+  const [quantidadeTimes, setQuantidadeTimes] = useState(6);
+  const [jogadoresPorTime, setJogadoresPorTime] = useState(15);
+  const [coresTimes, setCoresTimes] = useState<string[]>(coresPadrao.slice(0, 6));
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
+  const [peladaOriginal, setPeladaOriginal] = useState<{
+    quantidadeTimes?: number;
+    jogadoresPorTime?: number;
+    coresTimes?: string[];
+    players?: string[];
+    ranking?: Record<string, any>;
+    confirmados?: Array<any>;
+  } | null>(null);
+
+  // Carrega os dados iniciais da pelada
+  useEffect(() => {
+    if (!peladaId || !isOpen) return;
+
+    const carregarPelada = async () => {
+      try {
+        setLoadingData(true);
+        const peladaRef = doc(db, 'peladas', peladaId);
+        const peladaDoc = await getDoc(peladaRef);
+        
+        if (!peladaDoc.exists()) {
+          throw new Error('Pelada não encontrada');
+        }
+        
+        const peladaData = peladaDoc.data();
+        setPeladaOriginal(peladaData);
+        
+        // Configura os campos do formulário com os valores atuais
+        setQuantidadeTimes(peladaData.quantidadeTimes || 6);
+        setJogadoresPorTime(peladaData.jogadoresPorTime || 15);
+        setCoresTimes(peladaData.coresTimes || coresPadrao.slice(0, 6));
+        
+        console.log('Dados da pelada carregados com sucesso:', {
+          quantidadeTimes: peladaData.quantidadeTimes,
+          jogadoresPorTime: peladaData.jogadoresPorTime,
+          totalPlayers: peladaData.players?.length,
+          totalRanking: Object.keys(peladaData.ranking || {}).length,
+          totalConfirmados: peladaData.confirmados?.length
+        });
+      } catch (err) {
+        console.error('Erro ao carregar dados da pelada:', err);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar dados da pelada');
+      } finally {
+        setLoadingData(false);
+      }
+    };
+    
+    carregarPelada();
+  }, [peladaId, isOpen]);
 
   const handleQuantidadeTimesChange = (value: number) => {
     setQuantidadeTimes(value);
@@ -45,187 +91,183 @@ export default function PeladaConfigModal({ isOpen, onClose, onSave, mode = 'cre
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCorChange = (index: number, cor: string) => {
+    const novasCores = [...coresTimes];
+    novasCores[index] = cor;
+    setCoresTimes(novasCores);
+  };
+
+  const handleSalvar = async () => {
+    if (!peladaId || !peladaOriginal) {
+      setError('Dados da pelada não encontrados');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      if (!auth.currentUser) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      if (mode === 'create') {
-        if (!nomePelada.trim()) {
-          throw new Error('Nome da pelada é obrigatório');
-        }
-
-        // Criação de nova pelada
-        const peladaData = {
-          nome: nomePelada,
-          descricao: '',
-          ownerId: auth.currentUser.uid,
-          players: [auth.currentUser.uid],
-          ranking: {},
-          createdAt: new Date(),
-          quantidadeTimes,
-          jogadoresPorTime,
-          coresTimes: coresTimes.slice(0, quantidadeTimes),
-          confirmados: []
-        };
-
-        const novoPeladaId = await criarPelada(peladaData);
-        
-        // Limpamos os campos
-        setNomePelada('');
-        setQuantidadeTimes(2);
-        setJogadoresPorTime(5);
-        setCoresTimes(coresPadrao.slice(0, 2));
-        
-        onClose();
-        onSave(novoPeladaId);
-      } else {
-        // Atualização de pelada existente
-        if (!peladaId) {
-          throw new Error('ID da pelada não fornecido');
-        }
-
-        const peladaRef = doc(db, 'peladas', peladaId);
-        
-        // Atualiza apenas os campos de configuração
-        const updates = {
-          quantidadeTimes,
-          jogadoresPorTime,
-          coresTimes: coresTimes.slice(0, quantidadeTimes)
-        };
-
-        await updateDoc(peladaRef, updates);
-        onClose();
-        onSave(peladaId);
-        
-        // Redireciona para a página de confirmação
-        router.push(`/pelada/${peladaId}/confirmar`);
-      }
+      console.log('Salvando configurações da pelada:', peladaId);
+      
+      // Obter referência direta ao documento
+      const peladaRef = doc(db, 'peladas', peladaId);
+      
+      // IMPORTANTE: Atualizar apenas os campos específicos de configuração
+      // Não tocar nos arrays de players, confirmados ou no objeto ranking
+      await updateDoc(peladaRef, {
+        quantidadeTimes,
+        jogadoresPorTime,
+        coresTimes: coresTimes.slice(0, quantidadeTimes),
+        updatedAt: new Date().toISOString()
+      });
+      
+      console.log('Configurações salvas com sucesso');
+      
+      // Fecha o modal e notifica o componente pai
+      toast.success('Configurações salvas com sucesso!');
+      onClose();
+      onSave(peladaId);
+      
+      // Redireciona para a página de confirmação em vez do dashboard
+      router.push(`/pelada/${peladaId}/confirmar`);
     } catch (err) {
-      console.error('Erro ao salvar pelada:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao salvar pelada');
+      console.error('Erro ao salvar configurações:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao salvar configurações');
+      toast.error('Erro ao salvar configurações. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black bg-opacity-50" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
-          <Dialog.Title
-            as="h3"
-            className="text-lg font-medium leading-6 text-gray-900"
-          >
-            {mode === 'create' ? 'Criar Nova Pelada' : 'Configurar Pelada'}
-          </Dialog.Title>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-70 transition-opacity"></div>
+      
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="relative bg-white rounded-lg w-full max-w-md mx-auto shadow-xl overflow-hidden">
+          {/* Cabeçalho com abas */}
+          <div className="flex w-full">
+            <button
+              className={`flex-1 py-3 text-center transition-colors ${
+                activeTab === 'pelada' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={() => setActiveTab('pelada')}
+            >
+              PELADA
+            </button>
+            <button
+              className={`flex-1 py-3 text-center transition-colors ${
+                activeTab === 'time' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={() => setActiveTab('time')}
+            >
+              TIME
+            </button>
+          </div>
 
-          <form onSubmit={handleSubmit} className="mt-4">
-            <div className="space-y-4">
-              {mode === 'create' && (
+          <div className="p-6">
+            {loadingData ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Campo: Quantidade de Times */}
                 <div>
-                  <label htmlFor="nomePelada" className="block text-sm font-medium text-gray-700">
-                    Nome da Pelada
+                  <label htmlFor="quantidadeTimes" className="block text-sm text-gray-700 mb-2">
+                    Quantidade de Times
                   </label>
-                  <input
-                    type="text"
-                    id="nomePelada"
-                    value={nomePelada}
-                    onChange={(e) => setNomePelada(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    placeholder="Ex: Pelada do Sábado"
-                    required
-                  />
+                  <select
+                    id="quantidadeTimes"
+                    value={quantidadeTimes}
+                    onChange={(e) => handleQuantidadeTimesChange(Number(e.target.value))}
+                    className="block w-full border border-gray-300 rounded-md py-2 px-3 bg-white text-gray-900"
+                  >
+                    {[2, 3, 4, 5, 6, 7, 8].map(num => (
+                      <option key={num} value={num}>{num} times</option>
+                    ))}
+                  </select>
                 </div>
-              )}
 
-              <div>
-                <label htmlFor="quantidadeTimes" className="block text-sm font-medium text-gray-900 mb-1">
-                  Quantidade de Times
-                </label>
-                <select
-                  id="quantidadeTimes"
-                  value={quantidadeTimes}
-                  onChange={(e) => handleQuantidadeTimesChange(Number(e.target.value))}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-white"
-                >
-                  {[2, 3, 4, 5, 6, 7, 8].map(num => (
-                    <option key={num} value={num}>{num} times</option>
-                  ))}
-                </select>
-              </div>
+                {/* Campo: Jogadores por Time */}
+                <div>
+                  <label htmlFor="jogadoresPorTime" className="block text-sm text-gray-700 mb-2">
+                    Jogadores por Time
+                  </label>
+                  <select
+                    id="jogadoresPorTime"
+                    value={jogadoresPorTime}
+                    onChange={(e) => setJogadoresPorTime(Number(e.target.value))}
+                    className="block w-full border border-gray-300 rounded-md py-2 px-3 bg-white text-gray-900"
+                  >
+                    {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(num => (
+                      <option key={num} value={num}>{num} jogadores</option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label htmlFor="jogadoresPorTime" className="block text-sm font-medium text-gray-900 mb-1">
-                  Jogadores por Time
-                </label>
-                <select
-                  id="jogadoresPorTime"
-                  value={jogadoresPorTime}
-                  onChange={(e) => setJogadoresPorTime(Number(e.target.value))}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-white"
-                >
-                  {[3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                    <option key={num} value={num}>{num} jogadores</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Cores dos Times
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {coresTimes.map((cor, index) => (
-                    <div key={index} className="relative">
-                      <input
-                        type="color"
-                        value={cor}
-                        onChange={(e) => {
-                          const novasCores = [...coresTimes];
-                          novasCores[index] = e.target.value;
-                          setCoresTimes(novasCores);
+                {/* Cores dos Times */}
+                <div>
+                  <label className="block text-sm text-gray-700 mb-3">
+                    Cores dos Times
+                  </label>
+                  <div className="flex justify-center space-x-4">
+                    {coresTimes.slice(0, quantidadeTimes).map((cor, index) => (
+                      <div 
+                        key={index} 
+                        className="w-10 h-10 rounded-full cursor-pointer" 
+                        style={{ backgroundColor: cor }}
+                        onClick={() => {
+                          // Abre o seletor de cores nativo do navegador
+                          const input = document.createElement('input');
+                          input.type = 'color';
+                          input.value = cor;
+                          input.addEventListener('input', (e) => {
+                            // @ts-expect-error - Evento de input pode não ter o tipo adequado
+                            handleCorChange(index, e.target.value);
+                          });
+                          input.click();
                         }}
-                        className="w-full h-8 rounded cursor-pointer"
                       />
-                      <span className="block text-xs text-center mt-1 text-gray-900">Time {index + 1}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+
+                {error && (
+                  <div className="text-red-600 text-sm">
+                    {error}
+                  </div>
+                )}
               </div>
+            )}
 
-              {error && (
-                <div className="text-sm text-red-600 mt-2">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex justify-end space-x-3">
+            {/* Botões de ação */}
+            <div className="mt-8 flex justify-between">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors uppercase"
               >
                 Cancelar
               </button>
               <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                type="button"
+                onClick={handleSalvar}
+                disabled={loading || loadingData}
+                className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
               >
                 {loading ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </form>
-        </Dialog.Panel>
+          </div>
+        </div>
       </div>
-    </Dialog>
+    </div>
   );
 } 

@@ -1,32 +1,5 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getMessaging, getToken, onMessage, type Messaging, type MessagePayload } from 'firebase/messaging';
-
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-// Chave pública VAPID
-const VAPID_KEY = 'BABWxDnN3NxwPqGnIPofa92zU_JDBTjduRS-888v3B_fR5VTuxRxGQinUb5o4cmUMjsM10WwmtUX_4TolXYan1o';
-
-// Inicializa o Firebase apenas uma vez
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
-
-// Variável para armazenar a instância do messaging
-let messaging: Messaging | null = null;
-
-// Inicializa o messaging apenas no cliente (browser)
-if (typeof window !== 'undefined') {
-  try {
-    messaging = getMessaging(app);
-  } catch (error) {
-    console.error('Erro ao inicializar Firebase Messaging:', error);
-  }
-}
+import { getToken, onMessage, type MessagePayload } from 'firebase/messaging';
+import { messaging, VAPID_KEY } from './config';
 
 export const requestPermissionAndGetToken = async (): Promise<string | null> => {
   try {
@@ -66,9 +39,7 @@ export const requestPermissionAndGetToken = async (): Promise<string | null> => 
       throw new Error('Não foi possível gerar o token FCM');
     }
 
-    // Exibe o token no console
     console.log('Token FCM gerado:', token);
-
     return token;
   } catch (error) {
     console.error('Erro ao solicitar permissão ou gerar token:', error);
@@ -113,7 +84,4 @@ export const onForegroundMessage = (callback: (payload: MessagePayload) => void)
     console.log('Mensagem recebida em foreground:', payload);
     callback(payload);
   });
-};
-
-// Exporta a instância do messaging
-export { messaging }; 
+}; 

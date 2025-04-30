@@ -1,12 +1,9 @@
 import { collection, addDoc, query, where, getDocs, updateDoc, doc, onSnapshot, getDoc, arrayUnion } from 'firebase/firestore';
-import { db } from './firebase';
+import { db } from './config';
 import { setDoc, deleteDoc } from 'firebase/firestore';
 import { Notification } from '@/types/notification';
-
-interface Jogador {
-  nome: string;
-  dataConfirmacao: string;
-}
+import { PeladaData, Jogador } from '@/types/pelada';
+import { getUserById } from './userService';
 
 export interface NotificationObserver {
   next: (notifications: Notification[]) => void;
@@ -14,14 +11,13 @@ export interface NotificationObserver {
 }
 
 export const createNotification = async (notification: Notification): Promise<string> => {
-  const notificationData = {
-    ...notification,
-    read: false,
-    timestamp: new Date().toISOString()
-  };
-
-  const docRef = await addDoc(collection(db, 'notifications'), notificationData);
-  return docRef.id;
+  try {
+    const docRef = await addDoc(collection(db, 'notifications'), notification);
+    return docRef.id;
+  } catch (error) {
+    console.error('Erro ao criar notificação:', error);
+    throw error;
+  }
 };
 
 export const getNotifications = async (userId: string): Promise<Notification[]> => {
@@ -66,10 +62,7 @@ export const subscribeToNotifications = (userId: string, observer: NotificationO
 export const markNotificationAsRead = async (notificationId: string) => {
   try {
     const notificationRef = doc(db, 'notifications', notificationId);
-    await updateDoc(notificationRef, {
-      read: true,
-      readAt: new Date().toISOString()
-    });
+    await updateDoc(notificationRef, { read: true });
   } catch (error) {
     console.error('Erro ao marcar notificação como lida:', error);
     throw error;
@@ -202,19 +195,28 @@ export const respondToConfirmation = async (
     if (response === 'confirm') {
       const peladaDoc = await getDoc(peladaRef);
       if (peladaDoc.exists()) {
-        const peladaData = peladaDoc.data() as { players: string[], confirmados: Jogador[] };
+        const peladaData = peladaDoc.data() as PeladaData;
+        const userInfo = await getUserById(userId);
         
         // Adiciona à lista de players se ainda não estiver
         const novosPlayers = peladaData.players.includes(userId) 
           ? peladaData.players 
           : [...peladaData.players, userId];
 
+        const novoJogador: Jogador = {
+          uid: userId,
+          nome: userInfo?.nome || 'Usuário',
+          email: userInfo?.email || '',
+          dataConfirmacao: new Date().toISOString()
+        };
+
+        if (userInfo?.photoURL) {
+          novoJogador.photoURL = userInfo.photoURL;
+        }
+
         await updateDoc(peladaRef, {
           players: novosPlayers,
-          confirmados: arrayUnion({
-            nome: userId,
-            dataConfirmacao: new Date().toISOString()
-          })
+          confirmados: arrayUnion(novoJogador)
         });
       }
     }
@@ -254,15 +256,27 @@ export const acceptPeladaInvite = async (notificationId: string, userId: string)
         ? peladaData.players 
         : [...peladaData.players, userId];
 
-      // Adiciona à lista de confirmados se ainda não estiver
-      const novoConfirmado = {
-        nome: userId,
+      // CORREÇÃO: Não verificamos mais se o limite de jogadores confirmados foi atingido
+      // Os valores de quantidadeTimes e jogadoresPorTime são apenas para exibição visual
+      // e gerenciamento dos times durante a partida
+      
+      // Adiciona o jogador à lista de confirmados se ainda não estiver
+      const userInfo = await getUserById(userId);
+      const novoJogador: Jogador = {
+        uid: userId,
+        nome: userInfo?.nome || 'Usuário',
+        email: userInfo?.email || '',
         dataConfirmacao: new Date().toISOString()
       };
 
+      if (userInfo?.photoURL) {
+        novoJogador.photoURL = userInfo.photoURL;
+      }
+
+      // Verifica se o jogador já está confirmado 
       const confirmadosAtualizados = peladaData.confirmados || [];
-      if (!confirmadosAtualizados.some((c: { nome: string }) => c.nome === userId)) {
-        confirmadosAtualizados.push(novoConfirmado);
+      if (!confirmadosAtualizados.some((c: { uid: string }) => c.uid === userId)) {
+        confirmadosAtualizados.push(novoJogador);
       }
 
       // Atualiza a pelada com as novas informações
@@ -279,39 +293,45 @@ export const acceptPeladaInvite = async (notificationId: string, userId: string)
   }
 };
 
-export const sendConfirmationRequestToAllPlayers = async (
-  peladaId: string,
-  peladaNome: string,
-  jogadoresIds: string[]
-) => {
+export const sendConfirmationRequestToAllPlayers = async (peladaId: string, peladaData: PeladaData) => {
   try {
-    // Cria notificações individuais para cada jogador
-    const notifications = jogadoresIds.map(jogadorId => ({
+    // Obter os jogadores que já confirmaram presença
+    const jogadoresConfirmados = new Set(peladaData.confirmados?.map(j => j.uid) || []);
+    
+    // Pega todos os jogadores do ranking que ainda não confirmaram presença
+    const jogadoresParaConvidar = Object.keys(peladaData.ranking || {})
+      .filter(id => !jogadoresConfirmados.has(id));
+    
+    if (jogadoresParaConvidar.length === 0) {
+      console.log('Não há jogadores para convidar - todos já confirmaram presença ou foram convidados');
+      return;
+    }
+
+    console.log(`Enviando notificações para ${jogadoresParaConvidar.length} jogadores não confirmados:`, jogadoresParaConvidar);
+
+    // Cria notificações para cada jogador
+    const notificacoes = jogadoresParaConvidar.map(jogadorId => ({
       userId: jogadorId,
-      peladaId,
-      title: '🎮 Nova Pelada',
-      message: `Você quer participar da pelada ${peladaNome}?`,
-      timestamp: new Date().toISOString(),
+      title: 'Confirmação de Presença',
+      message: `Confirme sua presença na pelada "${peladaData.nome || 'Nova Pelada'}"`,
+      peladaId: peladaId,
       read: false,
       type: 'CONFIRMACAO' as const,
       respondido: false,
+      timestamp: new Date().toISOString(),
       actions: {
-        confirm: false,
-        reject: false
-      }
+        confirm: true,
+        reject: true
+      },
+      // Adicionando link direto para a página de confirmação com parâmetro para confirmar automaticamente
+      actionLink: `/pelada/${peladaId}/confirmar?status=confirm`
     }));
 
-    // Envia as notificações uma por uma
-    const results = await Promise.all(
-      notifications.map(notification => 
-        createNotification(notification)
-      )
-    );
+    // Envia todas as notificações
+    await Promise.all(notificacoes.map(notification => createNotification(notification)));
 
-    return {
-      success: true,
-      sent: results.length
-    };
+    console.log('Notificações enviadas com sucesso para:', jogadoresParaConvidar);
+    return jogadoresParaConvidar.length; // Retorna o número de jogadores notificados
   } catch (error) {
     console.error('Erro ao enviar notificações:', error);
     throw error;
@@ -365,6 +385,30 @@ export const removeUserFCMToken = async (userId: string, fcmToken: string): Prom
     console.log('Token FCM removido com sucesso');
   } catch (error) {
     console.error('Erro ao remover token FCM:', error);
+    throw error;
+  }
+};
+
+export const deleteNotification = async (notificationId: string) => {
+  try {
+    await deleteDoc(doc(db, 'notifications', notificationId));
+  } catch (error) {
+    console.error('Erro ao deletar notificação:', error);
+    throw error;
+  }
+};
+
+export const getUserNotifications = async (userId: string): Promise<Array<Notification & { id: string }>> => {
+  try {
+    const q = query(collection(db, 'notifications'), where('userId', '==', userId));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Array<Notification & { id: string }>;
+  } catch (error) {
+    console.error('Erro ao buscar notificações:', error);
     throw error;
   }
 };
