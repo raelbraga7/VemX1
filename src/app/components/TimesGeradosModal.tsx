@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import JogoEmAndamento, { TimeJogo } from './JogoEmAndamento';
 import { Time } from '@/types/pelada';
+import { toast } from 'react-hot-toast';
 
 interface TimesGeradosModalProps {
   isOpen: boolean;
@@ -28,9 +29,29 @@ export default function TimesGeradosModal({ isOpen, onClose, times, peladaId }: 
   };
 
   const handleConfirmar = () => {
-    if (timesSelecionados.length === 2) {
-      setJogoIniciado(true);
+    if (timesSelecionados.length !== 2) {
+      toast.error('Selecione exatamente 2 times para iniciar a partida!');
+      return;
     }
+
+    // Salva os times selecionados no localStorage no formato esperado pela página partida-time
+    const timesSelecionadosFormatados = timesSelecionados.map(index => ({
+      id: times[index].nome, // Usamos o nome como ID já que Time não tem id
+      name: times[index].nome
+    }));
+    
+    // Armazena no localStorage para recuperar na página de partida
+    localStorage.setItem(`timesSelecionados_${peladaId}`, JSON.stringify(timesSelecionadosFormatados));
+    
+    // Redireciona para a página de partida-time
+    window.location.href = `/pelada/${peladaId}/partida-time`;
+    
+    // Se por algum motivo o redirecionamento falhar, inicia o jogo localmente
+    setTimeout(() => {
+      if (window.location.pathname.indexOf('/partida-time') === -1) {
+        setJogoIniciado(true);
+      }
+    }, 500);
   };
 
   const handleFinalizarJogo = () => {
@@ -80,63 +101,40 @@ export default function TimesGeradosModal({ isOpen, onClose, times, peladaId }: 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[95vh] flex flex-col">
-        <div className="p-3 sm:p-6 flex-1 overflow-y-auto">
-          <div className="space-y-4 sm:space-y-6">
-            <div className="sticky top-0 bg-white pb-3 sm:pb-4 border-b border-gray-200">
-              <h2 className="text-lg sm:text-xl font-bold text-[#0d1b2a]">Times Gerados</h2>
-              
-              {timesSelecionados.length === 2 && (
-                <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between gap-2 sm:gap-4">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-sm sm:text-base mb-1 sm:mb-2" style={{ color: times[timesSelecionados[0]].cor }}>
-                        Time {timesSelecionados[0] + 1}
-                      </h3>
-                    </div>
-                    
-                    <div className="text-xl sm:text-2xl font-bold text-gray-400">
-                      X
-                    </div>
-                    
-                    <div className="flex-1 text-right">
-                      <h3 className="font-medium text-sm sm:text-base mb-1 sm:mb-2" style={{ color: times[timesSelecionados[1]].cor }}>
-                        Time {timesSelecionados[1] + 1}
-                      </h3>
-                    </div>
-                  </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-xl font-semibold">Times Gerados</h2>
+        </div>
+
+        <div className="overflow-auto flex-1 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {times.map((time, index) => (
+              <div 
+                key={index}
+                onClick={() => handleSelecaoTime(index)}
+                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                  timesSelecionados.includes(index) 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-blue-200'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-medium">{time.nome}</h3>
+                  <div 
+                    className="w-6 h-6 rounded-full" 
+                    style={{ backgroundColor: time.cor || '#3b82f6' }}
+                  ></div>
                 </div>
-              )}
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {times.map((time, index) => (
-                <div 
-                  key={index}
-                  onClick={() => handleSelecaoTime(index)}
-                  className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all ${
-                    timesSelecionados.includes(index) 
-                      ? 'ring-2 ring-[#1d4ed8] border-[#1d4ed8]' 
-                      : 'border-gray-200 hover:border-[#1d4ed8]'
-                  }`}
-                  style={{ borderColor: timesSelecionados.includes(index) ? time.cor : undefined }}
-                >
-                  <h3 className="font-medium text-sm sm:text-base mb-1 sm:mb-2" style={{ color: time.cor }}>
-                    Time {index + 1} {timesSelecionados.includes(index) && 
-                      `(${timesSelecionados.indexOf(index) + 1}º)`
-                    }
-                  </h3>
-                  <ul className="space-y-0.5 sm:space-y-1">
-                    {time.jogadores.map((jogador, idx) => (
-                      <li key={idx} className="text-xs sm:text-sm text-gray-600">
-                        • {jogador}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
+                <ul className="space-y-2">
+                  {time.jogadores.map((jogador, jIndex) => (
+                    <li key={jIndex} className="text-sm text-gray-700">
+                      {jogador}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
 

@@ -1,7 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
+import { useUser } from '@/contexts/UserContext';
+import { PLANOS } from '@/lib/mercadopago';
+import { toast } from 'react-hot-toast';
 
 const MockupSection = () => (
   <section className="py-16 px-4" aria-label="Visualização do aplicativo">
@@ -21,10 +23,51 @@ const MockupSection = () => (
 );
 
 export default function Home() {
-  const router = useRouter();
+  const { user } = useUser();
+  const [loading, setLoading] = useState(false);
 
-  const handleCTA = () => {
-    router.push('/pagamento');
+  // Função para rolar até a seção de planos
+  const scrollToPlans = () => {
+    const plansSection = document.getElementById('plans-section');
+    if (plansSection) {
+      plansSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleCTA = async (planoTipo: 'basico' | 'premium' = 'basico') => {
+    // Se o usuário não estiver logado, usamos um ID temporário e permitimos checkout anônimo
+    const userId = user ? user.uid : 'guest-' + Math.random().toString(36).substring(2, 15);
+    const userEmail = user ? user.email : 'visitante@temporario.com';
+
+    setLoading(true);
+
+    try {
+      // Iniciar checkout do Mercado Pago
+      const response = await fetch('/api/checkout/mercadopago', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plano: planoTipo,
+          userId: userId,
+          userEmail: userEmail,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        throw new Error(data.error || 'Erro ao criar checkout');
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar checkout:', error);
+      toast.error('Falha ao iniciar o pagamento. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,7 +77,7 @@ export default function Home() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="text-xl font-bold text-white">VemX1</h1>
           <button
-            onClick={handleCTA}
+            onClick={scrollToPlans}
             className="px-4 py-2 bg-[#1d4ed8] text-white rounded-lg hover:bg-[#1d4ed8]/90 transition-colors"
           >
             Começar Agora
@@ -68,10 +111,10 @@ export default function Home() {
               {/* CTA Button */}
               <div>
                 <button
-                  onClick={handleCTA}
+                  onClick={scrollToPlans}
                   className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-8 py-4 rounded-xl text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20"
                 >
-                  Comece agora por R$149,99
+                  Começar agora
                 </button>
               </div>
             </div>
@@ -104,34 +147,84 @@ export default function Home() {
         </Suspense>
 
         {/* Pricing Section */}
-        <section className="py-16 px-4 bg-black/50">
+        <section id="plans-section" className="py-16 px-4 bg-black/50">
           <div className="container mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-8">Plano Único</h2>
-            <div className="max-w-md mx-auto bg-black/40 rounded-2xl p-8 border border-[#1d4ed8]/20">
-              <div className="text-4xl font-bold mb-6">
-                R$149,99
-                <span className="text-lg text-gray-400">/mês</span>
+            <h2 className="text-3xl font-bold mb-8">Escolha seu plano</h2>
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              {/* Plano Básico */}
+              <div className="bg-black/40 rounded-2xl p-8 border border-[#1d4ed8]/20">
+                <div className="text-2xl font-bold mb-2">Plano Básico</div>
+                <div className="text-4xl font-bold mb-6">
+                  R${PLANOS.BASICO.preco}
+                  <span className="text-lg text-gray-400">/mês</span>
+                </div>
+                <ul className="text-left space-y-4 mb-8">
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Inclui todas as funcionalidades
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Até 20 jogadores por pelada
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Até 5 peladas simultâneas
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Cancele quando quiser
+                  </li>
+                </ul>
+                <button 
+                  onClick={() => handleCTA('basico')}
+                  disabled={loading}
+                  className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-8 py-4 w-full rounded-xl text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20"
+                >
+                  {loading ? 'Processando...' : 'Quero o Plano Básico'}
+                </button>
               </div>
-              <ul className="text-left space-y-4 mb-8">
-                <li className="flex items-center">
-                  <span className="text-[#1d4ed8] mr-2">✓</span>
-                  Inclui todas as funcionalidades
-                </li>
-                <li className="flex items-center">
-                  <span className="text-[#1d4ed8] mr-2">✓</span>
-                  Sem limite de jogadores
-                </li>
-                <li className="flex items-center">
-                  <span className="text-[#1d4ed8] mr-2">✓</span>
-                  Cancele quando quiser
-                </li>
-              </ul>
-              <button 
-                onClick={handleCTA}
-                className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-8 py-4 w-full rounded-xl text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20"
-              >
-                Quero jogar com organização ⚡
-              </button>
+
+              {/* Plano Premium */}
+              <div className="bg-black/40 rounded-2xl p-8 border-2 border-[#1d4ed8] relative">
+                <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-1 rounded-t-xl font-bold">
+                  Mais Popular
+                </div>
+                <div className="text-2xl font-bold mb-2 mt-6">Plano Premium</div>
+                <div className="text-4xl font-bold mb-6">
+                  R${PLANOS.PREMIUM.preco}
+                  <span className="text-lg text-gray-400">/mês</span>
+                </div>
+                <ul className="text-left space-y-4 mb-8">
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Todas as funcionalidades do plano básico
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Jogadores ILIMITADOS
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Peladas ILIMITADAS
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Estatísticas avançadas
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-[#1d4ed8] mr-2">✓</span>
+                    Suporte prioritário
+                  </li>
+                </ul>
+                <button 
+                  onClick={() => handleCTA('premium')}
+                  disabled={loading}
+                  className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-8 py-4 w-full rounded-xl text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20"
+                >
+                  {loading ? 'Processando...' : 'Quero o Plano Premium'}
+                </button>
+              </div>
             </div>
           </div>
         </section>

@@ -60,8 +60,7 @@ export default function CriarPelada() {
       // Envia notificações para os jogadores
       await sendConfirmationRequestToAllPlayers(
         peladaId,
-        nome,
-        [user.uid]
+        nome
       );
 
       toast.success('Pelada criada com sucesso!');

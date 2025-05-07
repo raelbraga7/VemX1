@@ -293,8 +293,21 @@ export const acceptPeladaInvite = async (notificationId: string, userId: string)
   }
 };
 
-export const sendConfirmationRequestToAllPlayers = async (peladaId: string, peladaData: PeladaData) => {
+export const sendConfirmationRequestToAllPlayers = async (
+  peladaId: string, 
+  peladaNome: string
+) => {
   try {
+    // Buscar os dados da pelada primeiro
+    const peladaRef = doc(db, 'peladas', peladaId);
+    const peladaDoc = await getDoc(peladaRef);
+    
+    if (!peladaDoc.exists()) {
+      throw new Error('Pelada não encontrada');
+    }
+    
+    const peladaData = peladaDoc.data() as PeladaData;
+    
     // Obter os jogadores que já confirmaram presença
     const jogadoresConfirmados = new Set(peladaData.confirmados?.map(j => j.uid) || []);
     
@@ -304,7 +317,7 @@ export const sendConfirmationRequestToAllPlayers = async (peladaId: string, pela
     
     if (jogadoresParaConvidar.length === 0) {
       console.log('Não há jogadores para convidar - todos já confirmaram presença ou foram convidados');
-      return;
+      return 0;
     }
 
     console.log(`Enviando notificações para ${jogadoresParaConvidar.length} jogadores não confirmados:`, jogadoresParaConvidar);
@@ -313,7 +326,7 @@ export const sendConfirmationRequestToAllPlayers = async (peladaId: string, pela
     const notificacoes = jogadoresParaConvidar.map(jogadorId => ({
       userId: jogadorId,
       title: 'Confirmação de Presença',
-      message: `Confirme sua presença na pelada "${peladaData.nome || 'Nova Pelada'}"`,
+      message: `Confirme sua presença na pelada "${peladaNome || 'Nova Pelada'}"`,
       peladaId: peladaId,
       read: false,
       type: 'CONFIRMACAO' as const,

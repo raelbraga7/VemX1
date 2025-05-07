@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, updateDoc, getDoc, arrayUnion, DocumentData } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, getDoc, arrayUnion, DocumentData, FieldValue } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-hot-toast';
 import { 
@@ -67,6 +67,17 @@ interface RankingTimeUpdate {
   golsContra?: number;
   saldoGols?: number;
   pontos?: number;
+  historico?: FieldValue;
+}
+
+interface JogadorEstatistica {
+  gols: number;
+  assistencias: number;
+  vitorias: number;
+  derrotas: number;
+  pontos: number;
+  jogos: number;
+  empates: number;
 }
 
 type Vencedor = Time | 'empate';
@@ -212,7 +223,15 @@ export default function PartidaTime() {
           const rankingTimes = peladaData.rankingTimes || {};
 
           // Objeto para armazenar as atualizações que serão aplicadas
-          const rankingTimesUpdates: { [key: string]: RankingTimeUpdate } = {};
+          const rankingTimesUpdates: { [key: string]: RankingTimeUpdate | FieldValue } = {};
+          
+          // Objeto para atualizar estatísticas dos jogadores por time
+          const estatisticasJogadoresUpdates: { [key: string]: any } = {};
+
+          // Inicializar estrutura de estatísticas por time se não existir
+          if (!peladaData.estatisticasTime) {
+            estatisticasJogadoresUpdates['estatisticasTime'] = {};
+          }
 
           // Calcular pontos e atualizações com base no resultado
           if (timeAId && timeBId) {
@@ -335,11 +354,96 @@ export default function PartidaTime() {
             // Adicionar histórico à atualização
             rankingTimesUpdates['historico'] = arrayUnion(historicoPartida);
 
+            // Atualizar estatísticas dos jogadores do Time A
+            jogadoresTimeAValidos.forEach(jogador => {
+              const jogadorId = jogador.id || jogador.uid || '';
+              if (!jogadorId) return;
+              
+              // Buscar estatísticas existentes do jogador neste time
+              const estatisticasTime = peladaData.estatisticasTime || {};
+              const estatisticasDoTime = estatisticasTime[timeAId] || {};
+              const jogadorStats = estatisticasDoTime[jogadorId] || {
+                gols: 0,
+                assistencias: 0,
+                vitorias: 0,
+                derrotas: 0,
+                pontos: 0,
+                jogos: 0,
+                empates: 0
+              };
+              
+              // Calcular pontos com base na nova tabela:
+              // Gol: +2, Assistência: +1, Vitória: +7, Derrota: -6, Empate: +1, Participação: +0.5
+              const pontosPorGols = (jogador.gols || 0) * 2;
+              const pontosPorAssistencias = (jogador.assistencias || 0) * 1;
+              const pontosPorResultado = timeAVenceu ? 7 : (timeBVenceu ? -6 : 1); // Vitória, derrota ou empate
+              const pontosPorParticipacao = 0.5; // Apenas por participar da partida
+              
+              const pontosDaPartida = pontosPorGols + pontosPorAssistencias + pontosPorResultado + pontosPorParticipacao;
+              
+              // Atualizar estatísticas do jogador
+              const novasEstatisticas: JogadorEstatistica = {
+                gols: (jogadorStats.gols || 0) + (jogador.gols || 0),
+                assistencias: (jogadorStats.assistencias || 0) + (jogador.assistencias || 0),
+                vitorias: (jogadorStats.vitorias || 0) + (timeAVenceu ? 1 : 0),
+                derrotas: (jogadorStats.derrotas || 0) + (timeBVenceu ? 1 : 0),
+                pontos: (jogadorStats.pontos || 0) + pontosDaPartida,
+                jogos: (jogadorStats.jogos || 0) + 1,
+                empates: (jogadorStats.empates || 0) + (empate ? 1 : 0)
+              };
+              
+              // Adicionar à lista de atualizações
+              estatisticasJogadoresUpdates[`estatisticasTime.${timeAId}.${jogadorId}`] = novasEstatisticas;
+            });
+            
+            // Atualizar estatísticas dos jogadores do Time B
+            jogadoresTimeBValidos.forEach(jogador => {
+              const jogadorId = jogador.id || jogador.uid || '';
+              if (!jogadorId) return;
+              
+              // Buscar estatísticas existentes do jogador neste time
+              const estatisticasTime = peladaData.estatisticasTime || {};
+              const estatisticasDoTime = estatisticasTime[timeBId] || {};
+              const jogadorStats = estatisticasDoTime[jogadorId] || {
+                gols: 0,
+                assistencias: 0,
+                vitorias: 0,
+                derrotas: 0,
+                pontos: 0,
+                jogos: 0,
+                empates: 0
+              };
+              
+              // Calcular pontos com base na nova tabela:
+              // Gol: +2, Assistência: +1, Vitória: +7, Derrota: -6, Empate: +1, Participação: +0.5
+              const pontosPorGols = (jogador.gols || 0) * 2;
+              const pontosPorAssistencias = (jogador.assistencias || 0) * 1;
+              const pontosPorResultado = timeBVenceu ? 7 : (timeAVenceu ? -6 : 1); // Vitória, derrota ou empate
+              const pontosPorParticipacao = 0.5; // Apenas por participar da partida
+              
+              const pontosDaPartida = pontosPorGols + pontosPorAssistencias + pontosPorResultado + pontosPorParticipacao;
+              
+              // Atualizar estatísticas do jogador
+              const novasEstatisticas: JogadorEstatistica = {
+                gols: (jogadorStats.gols || 0) + (jogador.gols || 0),
+                assistencias: (jogadorStats.assistencias || 0) + (jogador.assistencias || 0),
+                vitorias: (jogadorStats.vitorias || 0) + (timeBVenceu ? 1 : 0),
+                derrotas: (jogadorStats.derrotas || 0) + (timeAVenceu ? 1 : 0),
+                pontos: (jogadorStats.pontos || 0) + pontosDaPartida,
+                jogos: (jogadorStats.jogos || 0) + 1,
+                empates: (jogadorStats.empates || 0) + (empate ? 1 : 0)
+              };
+              
+              // Adicionar à lista de atualizações
+              estatisticasJogadoresUpdates[`estatisticasTime.${timeBId}.${jogadorId}`] = novasEstatisticas;
+            });
+
             console.log('DEBUG: Atualizando ranking de times...', rankingTimesUpdates);
+            console.log('DEBUG: Atualizando estatísticas de jogadores por time...', estatisticasJogadoresUpdates);
 
             // Aplicar as atualizações no Firestore
-            await updateDoc(peladaRef, rankingTimesUpdates);
-            console.log('DEBUG: Ranking de times atualizado com sucesso!');
+            await updateDoc(peladaRef, { ...rankingTimesUpdates, ...estatisticasJogadoresUpdates });
+            console.log('DEBUG: Ranking de times e estatísticas de jogadores atualizados com sucesso!');
           }
         }
       } catch (error) {
@@ -474,8 +578,10 @@ export default function PartidaTime() {
           
           if (vencedor === 'empate') {
             toast('Tempo esgotado! A partida terminou empatada!');
-          } else {
+          } else if (vencedor) {
             toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
+          } else {
+            toast('Tempo esgotado!');
           }
           
           // Finalize a partida automaticamente

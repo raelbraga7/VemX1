@@ -66,11 +66,10 @@ export default function CriarPelada() {
       // Salva a pelada no Firestore
       await setDoc(peladaRef, peladaData)
 
-      // Envia notificações para os jogadores
+      // Enviar notificações para todos os jogadores
       await sendConfirmationRequestToAllPlayers(
         peladaId,
-        nome,
-        [user.uid]
+        nome
       )
 
       toast.success('Pelada criada com sucesso!')

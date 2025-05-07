@@ -1,3 +1,5 @@
+import { Timestamp } from 'firebase/firestore';
+
 export interface Jogador {
   uid: string;
   id?: string;
@@ -39,8 +41,8 @@ export interface PeladaData {
   coresTimes: string[];
   confirmados: Jogador[];
   temporada?: {
-    inicio: Date;
-    fim: Date;
+    inicio: Timestamp;
+    fim: Timestamp;
     nome: string;
     status: 'ativa' | 'encerrada' | 'aguardando';
   };

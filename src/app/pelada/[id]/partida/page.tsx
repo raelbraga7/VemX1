@@ -90,6 +90,13 @@ export default function Partida() {
   const [openModal, setOpenModal] = useState(false);
   const [timesSalvos, setTimesSalvos] = useState<Time[]>([]);
   const [timesSelecionados, setTimesSelecionados] = useState<TimeSelecionado[]>([]);
+  const [partidaFinalizada, setPartidaFinalizada] = useState(false);
+  const [resumoPartida, setResumoPartida] = useState<{
+    timeA?: Time;
+    timeB?: Time;
+    vencedor: 'timeA' | 'timeB' | 'empate' | null;
+    placar: string;
+  }>({ vencedor: null, placar: '' });
   
   // Referência para a função de finalizar partida
   const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
@@ -105,12 +112,16 @@ export default function Partida() {
         const times = JSON.parse(timesPartidaString) as Time[];
         console.log('Times da partida encontrados:', times);
         
-        // Reseta os gols e assistências dos times
+        // Reseta os gols e assistências dos times e garante IDs válidos
         const timesResetados = times.map(time => ({
           ...time,
           gols: 0,
-          jogadores: time.jogadores.map(j => ({
-            ...j,
+          jogadores: time.jogadores
+            .filter(j => j.nome) // Garante que só jogadores com nome sejam incluídos
+            .map(j => ({
+              id: j.id || `jogador-${j.nome.replace(/\s+/g, '-').toLowerCase()}`,
+              uid: j.uid || '',
+              nome: j.nome,
             gols: 0,
             assistencias: 0
           }))
@@ -133,17 +144,149 @@ export default function Partida() {
   // Carregar times do localStorage
   useEffect(() => {
     try {
-      const timesString = localStorage.getItem(`timesPartida_${params.id}`);
+      // DEBUG: Verificação de todos os itens no localStorage com padrão de nomes relacionados
+      console.log('DEBUG: Verificando todos os itens do localStorage relacionados a times:');
+      Object.keys(localStorage).forEach(key => {
+        if (key.includes('times') || key.includes('Time')) {
+          console.log(`DEBUG: Item ${key}:`, localStorage.getItem(key));
+        }
+      });
+      
+      const peladaId = params.id;
+      console.log('DEBUG: ID da pelada para busca:', peladaId);
+      
+      // Tenta todas as fontes de dados em sequência:
+      // 1. localStorage principal
+      let timesString = localStorage.getItem(`timesPartida_${peladaId}`);
+      let fonte = 'localStorage principal';
+      
+      // 2. Backup no localStorage
       if (!timesString) {
-        setError('Nenhum time encontrado');
+        console.log('DEBUG: Tentando backup no localStorage');
+        timesString = localStorage.getItem(`timesPartidaBackup_${peladaId}`);
+        fonte = 'localStorage backup';
+      }
+      
+      // 3. Nome genérico no localStorage
+      if (!timesString) {
+        console.log('DEBUG: Tentando nome genérico no localStorage');
+        timesString = localStorage.getItem(`timesUltimos`);
+        fonte = 'localStorage genérico';
+      }
+      
+      // 4. sessionStorage
+      if (!timesString) {
+        console.log('DEBUG: Tentando sessionStorage');
+        timesString = sessionStorage.getItem(`timesPartida_${peladaId}`);
+        fonte = 'sessionStorage';
+      }
+      
+      // 5. Variável global
+      if (!timesString) {
+        console.log('DEBUG: Tentando variável global');
+        try {
+          // @ts-expect-error - Acessando propriedade dinâmica do objeto window
+          const timesGlobal = window.timesPartidaGlobal;
+          if (timesGlobal) {
+            timesString = JSON.stringify(timesGlobal);
+            fonte = 'variável global';
+          }
+        } catch (e) {
+          console.warn('DEBUG: Erro ao acessar variável global', e);
+        }
+      }
+      
+      // 6. Firestore
+      if (!timesString) {
+        console.log('DEBUG: Tentando buscar do Firestore - carregamento assíncrono');
+        if (peladaId && typeof peladaId === 'string') {
+          getDoc(doc(db, 'peladas', peladaId)).then(docSnap => {
+            if (docSnap.exists()) {
+              const peladaData = docSnap.data();
+              if (peladaData?.timesPartidaAtual) {
+                console.log('DEBUG: Times encontrados no Firestore');
+                const timesFirestore = peladaData.timesPartidaAtual;
+                
+                // Salvar nos backups locais para uso futuro
+                localStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesFirestore));
+                
+                if (timesFirestore.length === 2) {
+                  setTimeA(timesFirestore[0]);
+                  setTimeB(timesFirestore[1]);
+                  setLoading(false);
+        return;
+                } else {
+                  console.error('DEBUG: Número incorreto de times no Firestore:', timesFirestore.length);
+                  setError('Número incorreto de times no Firestore');
+                }
+              }
+            }
+          }).catch(error => {
+            console.error('DEBUG: Erro ao buscar times do Firestore:', error);
+          });
+        }
+      }
+      
+      // 7. Último recurso - timesGerados
+      if (!timesString) {
+        console.warn('DEBUG: Tentando buscar times alternativos em timesGerados_');
+        const timesGeradosString = localStorage.getItem(`timesGerados_${peladaId}`);
+        
+        if (timesGeradosString) {
+          console.log('DEBUG: Times encontrados em timesGerados_');
+          const timesGerados = JSON.parse(timesGeradosString);
+          // Adaptar o formato se necessário e salvar como timesPartida
+          const timesAdaptados = timesGerados.map((time: Time) => ({
+            ...time,
+            gols: 0,
+            jogadores: time.jogadores.map((j: Jogador) => ({
+              ...j,
+              gols: 0,
+              assistencias: 0
+            }))
+          }));
+          
+          if (timesAdaptados.length >= 2) {
+            // Selecionar os dois primeiros times
+            const timesSelecionados = [timesAdaptados[0], timesAdaptados[1]];
+            console.log('DEBUG: Salvando times alternativos encontrados:', timesSelecionados);
+            
+            // Salvar em todas as fontes de backup
+            localStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesSelecionados));
+            localStorage.setItem(`timesPartidaBackup_${peladaId}`, JSON.stringify(timesSelecionados));
+            localStorage.setItem(`timesUltimos`, JSON.stringify(timesSelecionados));
+            sessionStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesSelecionados));
+            
+            setTimeA(timesSelecionados[0]);
+            setTimeB(timesSelecionados[1]);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        setError('Nenhum time encontrado em nenhuma fonte de dados');
         return;
       }
 
+      console.log(`DEBUG: Times encontrados na fonte: ${fonte}`);
       const times = JSON.parse(timesString) as Time[];
       if (times.length !== 2) {
+        console.error('DEBUG: Número incorreto de times:', times.length);
         setError('Número incorreto de times');
         return;
       }
+
+      console.log('DEBUG: Times carregados com sucesso:', times.map(t => ({
+        id: t.id,
+        nome: t.nome,
+        jogadores: t.jogadores.map(j => j.nome)
+      })));
+      
+      // Salvar em todas as fontes de backup para garantir consistência
+      localStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(times));
+      localStorage.setItem(`timesPartidaBackup_${peladaId}`, JSON.stringify(times));
+      localStorage.setItem(`timesUltimos`, JSON.stringify(times));
+      sessionStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(times));
 
       setTimeA(times[0]);
       setTimeB(times[1]);
@@ -175,8 +318,39 @@ export default function Partida() {
   // Função para determinar o vencedor
   const determinarVencedor = useCallback((): Vencedor | null => {
     if (!timeA || !timeB) return null;
-    if ((timeA.gols ?? 0) > (timeB.gols ?? 0)) return timeA;
-    if ((timeB.gols ?? 0) > (timeA.gols ?? 0)) return timeB;
+    
+    const timeAGols = timeA.gols || 0;
+    const timeBGols = timeB.gols || 0;
+    
+    if (timeAGols > timeBGols) {
+      // Atualiza o resumo da partida quando determina um vencedor
+      setResumoPartida({
+        timeA,
+        timeB,
+        vencedor: 'timeA',
+        placar: `${timeAGols} x ${timeBGols}`
+      });
+      return timeA;
+    }
+    
+    if (timeBGols > timeAGols) {
+      // Atualiza o resumo da partida quando determina um vencedor
+      setResumoPartida({
+        timeA,
+        timeB,
+        vencedor: 'timeB',
+        placar: `${timeAGols} x ${timeBGols}`
+      });
+      return timeB;
+    }
+    
+    // Caso de empate
+    setResumoPartida({
+      timeA,
+      timeB,
+      vencedor: 'empate',
+      placar: `${timeAGols} x ${timeBGols}`
+    });
     return 'empate';
   }, [timeA, timeB]);
 
@@ -193,31 +367,12 @@ export default function Partida() {
       const timeAValido = { ...timeA, jogadores: jogadoresTimeAValidos };
       const timeBValido = { ...timeB, jogadores: jogadoresTimeBValidos };
       
-      // Log para depuração
-      if (timeA.jogadores.length !== jogadoresTimeAValidos.length || 
-          timeB.jogadores.length !== jogadoresTimeBValidos.length) {
-        console.warn('DEBUG: Alguns jogadores com IDs inválidos foram removidos:', {
-          timeA: timeA.jogadores.length - jogadoresTimeAValidos.length,
-          timeB: timeB.jogadores.length - jogadoresTimeBValidos.length
-        });
-      }
+      const timeAGols = timeAValido.gols || 0;
+      const timeBGols = timeBValido.gols || 0;
       
-      console.log('DEBUG: Times válidos para calcular ranking:', {
-        timeA: {
-          nome: timeAValido.nome,
-          gols: timeAValido.gols,
-          jogadores: timeAValido.jogadores.map(j => ({ id: j.id, nome: j.nome, gols: j.gols, assistencias: j.assistencias }))
-        },
-        timeB: {
-          nome: timeBValido.nome,
-          gols: timeBValido.gols,
-          jogadores: timeBValido.jogadores.map(j => ({ id: j.id, nome: j.nome, gols: j.gols, assistencias: j.assistencias }))
-        }
-      });
-      
-      const timeAVenceu = (timeAValido.gols ?? 0) > (timeBValido.gols ?? 0);
-      const timeBVenceu = (timeBValido.gols ?? 0) > (timeAValido.gols ?? 0);
-      const empate = (timeAValido.gols ?? 0) === (timeBValido.gols ?? 0);
+      const timeAVenceu = timeAGols > timeBGols;
+      const timeBVenceu = timeBGols > timeAGols;
+      const empate = timeAGols === timeBGols;
 
       // Busca o documento da pelada
       const peladaRef = doc(db, 'peladas', params.id);
@@ -228,34 +383,18 @@ export default function Partida() {
         throw new Error('Dados da pelada não encontrados');
       }
 
-      console.log('DEBUG: Dados originais da pelada:', {
-        peladaId: params.id,
-        rankingExistente: Object.keys(peladaData.ranking || {}).length
-      });
-
       // Prepara as atualizações do ranking para todos os jogadores
-      const rankingUpdates: { [key: string]: RankingUpdate } = {};
-      // Objeto para armazenar o ranking direto (sem notação de ponto)
-      const rankingDireto: Record<string, RankingUpdate> = {};
+      const rankingFinal: Record<string, RankingUpdate> = { ...(peladaData.ranking || {}) };
 
       // Processa jogadores do Time A
       for (const jogador of timeAValido.jogadores) {
         // Obter o ID válido, priorizando uid se estiver disponível
         const jogadorId = jogador.uid || jogador.id;
-        if (!jogadorId || jogadorId === 'undefined') {
-          console.warn('DEBUG: Jogador sem ID válido:', jogador.nome);
-          continue;
-        }
+        if (!jogadorId || jogadorId === 'undefined') continue;
 
         const resultado = timeAVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
         const golsNum = Number(jogador.gols) || 0;
         const assistenciasNum = Number(jogador.assistencias) || 0;
-
-        console.log(`DEBUG: Processando jogador do Time A: ${jogador.nome} (${jogadorId})`, {
-          resultado,
-          gols: golsNum,
-          assistencias: assistenciasNum
-        });
 
         const rankingAtual = peladaData.ranking?.[jogadorId] || {
           jogos: 0,
@@ -268,9 +407,7 @@ export default function Partida() {
           nome: jogador.nome
         };
 
-        console.log(`DEBUG: Ranking atual do jogador ${jogador.nome}:`, rankingAtual);
-
-        // Calcula os pontos com a nova tabela de pontuação
+        // Calcula os pontos com a tabela de pontuação
         const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
         const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
         const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
@@ -286,7 +423,7 @@ export default function Partida() {
                              pontosPorAssistencias +
                              pontosPorParticipacao);
 
-        const novoRanking: RankingUpdate = {
+        rankingFinal[jogadorId] = {
           jogos: (rankingAtual.jogos || 0) + 1,
           gols: (rankingAtual.gols || 0) + golsNum,
           assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
@@ -296,40 +433,17 @@ export default function Partida() {
           pontos: pontosTotais,
           nome: jogador.nome
         };
-
-        console.log(`DEBUG: Novo ranking do jogador ${jogador.nome}:`, {
-          pontosPorVitoria,
-          pontosPorDerrota,
-          pontosPorEmpate,
-          pontosPorGols,
-          pontosPorAssistencias,
-          pontosPorParticipacao,
-          pontosTotais,
-          novoRanking
-        });
-
-        rankingUpdates[`ranking.${jogadorId}`] = novoRanking;
-        rankingDireto[jogadorId] = novoRanking;
       }
 
       // Processa jogadores do Time B
       for (const jogador of timeBValido.jogadores) {
         // Obter o ID válido, priorizando uid se estiver disponível
         const jogadorId = jogador.uid || jogador.id;
-        if (!jogadorId || jogadorId === 'undefined') {
-          console.warn('DEBUG: Jogador sem ID válido:', jogador.nome);
-          continue;
-        }
+        if (!jogadorId || jogadorId === 'undefined') continue;
 
         const resultado = timeBVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
         const golsNum = Number(jogador.gols) || 0;
         const assistenciasNum = Number(jogador.assistencias) || 0;
-
-        console.log(`DEBUG: Processando jogador do Time B: ${jogador.nome} (${jogadorId})`, {
-          resultado,
-          gols: golsNum,
-          assistencias: assistenciasNum
-        });
 
         const rankingAtual = peladaData.ranking?.[jogadorId] || {
           jogos: 0,
@@ -342,9 +456,7 @@ export default function Partida() {
           nome: jogador.nome
         };
 
-        console.log(`DEBUG: Ranking atual do jogador ${jogador.nome}:`, rankingAtual);
-
-        // Calcula os pontos com a nova tabela de pontuação
+        // Calcula os pontos com a tabela de pontuação
         const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
         const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
         const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
@@ -360,7 +472,7 @@ export default function Partida() {
                              pontosPorAssistencias +
                              pontosPorParticipacao);
 
-        const novoRanking: RankingUpdate = {
+        rankingFinal[jogadorId] = {
           jogos: (rankingAtual.jogos || 0) + 1,
           gols: (rankingAtual.gols || 0) + golsNum,
           assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
@@ -370,34 +482,18 @@ export default function Partida() {
           pontos: pontosTotais,
           nome: jogador.nome
         };
-
-        console.log(`DEBUG: Novo ranking do jogador ${jogador.nome}:`, {
-          pontosPorVitoria,
-          pontosPorDerrota,
-          pontosPorEmpate,
-          pontosPorGols,
-          pontosPorAssistencias,
-          pontosPorParticipacao,
-          pontosTotais,
-          novoRanking
-        });
-
-        rankingUpdates[`ranking.${jogadorId}`] = novoRanking;
-        rankingDireto[jogadorId] = novoRanking;
       }
-
-      console.log('DEBUG: Atualizações do ranking preparadas:', Object.keys(rankingUpdates).length, 'jogadores');
       
       // Verifica se há alguma atualização para ser feita
-      if (Object.keys(rankingUpdates).length === 0) {
-        console.error('DEBUG: Nenhuma atualização de ranking para enviar!');
+      if (Object.keys(rankingFinal).length === 0) {
+        console.error('Nenhuma atualização de ranking para enviar!');
         toast.error('Não foi possível atualizar o ranking: nenhum jogador válido');
         return false;
       }
 
-      // Adicionar o historico ao objeto de atualizações
-      const updatesWithHistory = {
-        ...rankingUpdates,
+      // Salva o resultado da partida e atualiza o ranking
+      await updateDoc(peladaRef, {
+        ranking: rankingFinal,
         historico: arrayUnion({
           data: new Date(),
           timeA: {
@@ -410,69 +506,12 @@ export default function Partida() {
           },
           empate: empate
         })
-      };
+      });
 
-      console.log('DEBUG: Enviando atualizações para o Firestore...');
+      // Atualiza o estado com informações da partida finalizada
+      setPartidaFinalizada(true);
       
-      // Salva o resultado da partida e atualiza o ranking em uma única operação
-      await updateDoc(peladaRef, updatesWithHistory);
-
-      // Segunda tentativa - atualizar apenas o ranking usando o objeto direto
-      try {
-        console.log('DEBUG: Tentando segunda atualização usando objeto direto...');
-        await updateDoc(peladaRef, { 
-          ranking: rankingDireto 
-        });
-        console.log('DEBUG: Segunda atualização concluída com sucesso');
-      } catch (err) {
-        console.error('DEBUG: Erro na segunda tentativa:', err);
-      }
-
-      // Verifica se o ranking foi realmente atualizado
-      const peladaAposAtualizacao = await getDoc(peladaRef);
-      if (peladaAposAtualizacao.exists()) {
-        const dataAposAtualizacao = peladaAposAtualizacao.data();
-        console.log('DEBUG: Verificação pós-atualização:', {
-          rankingAposAtualizacao: Object.keys(dataAposAtualizacao.ranking || {}).length,
-          primeirosJogadores: Object.entries(dataAposAtualizacao.ranking || {})
-            .slice(0, 3)
-            .map(([id, data]) => ({ id, pontos: (data as RankingData).pontos }))
-        });
-        
-        // CORREÇÃO: Atualizar diretamente o ranking para cada jogador
-        // Isso garante que os updates não sejam mesclados incorretamente
-        if (Object.keys(rankingUpdates).length > 0) {
-          // Definir o tipo corretamente para evitar erros de tipo
-          const rankingFinal: Record<string, RankingData> = {};
-          
-          // Cria um objeto com o ranking completo
-          if (dataAposAtualizacao.ranking) {
-            // Copiar os dados do ranking atual
-            Object.entries(dataAposAtualizacao.ranking).forEach(([key, value]) => {
-              rankingFinal[key] = value as RankingData;
-            });
-            
-            // Aplicar os updates do ranking atual
-            Object.entries(rankingUpdates).forEach(([key, value]) => {
-              const jogadorId = key.replace('ranking.', '');
-              rankingFinal[jogadorId] = value;
-            });
-            
-            // Atualiza o documento com o ranking completo de uma vez
-            try {
-              console.log('DEBUG: Realizando atualização de ranking final...');
-              await updateDoc(peladaRef, {
-                ranking: rankingFinal
-              });
-              console.log('DEBUG: Ranking final atualizado com sucesso!');
-            } catch (updateError) {
-              console.error('DEBUG: Erro na atualização final do ranking:', updateError);
-            }
-          }
-        }
-      }
-
-      console.log('DEBUG: Ranking atualizado com sucesso!');
+      console.log('Ranking atualizado com sucesso!');
       toast.success('Ranking atualizado com sucesso!');
       return true;
     } catch (error) {
@@ -588,6 +627,70 @@ export default function Partida() {
     finalizarPartidaRef.current = handleFinalizarPartida;
   }, [handleFinalizarPartida]);
 
+  // Função para abrir o modal
+  const handleOpenModal = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const rankingAtualizado = await handleFinalizarPartida();
+      
+      if (!rankingAtualizado) {
+        toast.error('Erro ao atualizar o ranking');
+        setLoading(false);
+        return;
+      }
+
+      // Preparar para a próxima partida
+      // Busca os times gerados da página anterior com fallbacks
+      const timesGeradosString = localStorage.getItem(`timesGerados_${params.id}`) || 
+                                 localStorage.getItem(`timesPartida_${params.id}`) ||
+                                 localStorage.getItem(`timesUltimos`);
+      
+      if (timesGeradosString) {
+        try {
+          // Usa os times disponíveis
+          const times = JSON.parse(timesGeradosString) as Time[];
+          
+          // Reseta os gols e assistências dos times
+          const timesResetados = times.map(time => ({
+            ...time,
+            gols: 0,
+            jogadores: time.jogadores
+              .filter(j => j.nome) // Garante que só jogadores com nome sejam incluídos
+              .map(j => ({
+                id: j.id || `jogador-${j.nome.replace(/\s+/g, '-').toLowerCase()}`,
+                uid: j.uid || '',
+                nome: j.nome,
+                gols: 0,
+                assistencias: 0
+              }))
+          }));
+
+          setTimesSalvos(timesResetados);
+          setTimesSelecionados(timesResetados.map(time => ({
+            id: time.id,
+            selecionado: false
+          })));
+          
+          // Abre o modal com o resumo da partida
+          setOpenModal(true);
+        } catch (parseError) {
+          console.error('Erro ao processar times:', parseError);
+          toast.error('Formato de times inválido');
+        }
+      } else {
+        console.log('Nenhum time encontrado');
+        toast.error('Nenhum time disponível. Por favor, gere os times na página de confirmação.');
+        router.push(`/pelada/${params.id}/confirmar`);
+      }
+    } catch (error) {
+      console.error('Erro ao abrir modal:', error);
+      toast.error('Erro ao carregar times');
+    } finally {
+      setLoading(false);
+    }
+  }, [handleFinalizarPartida, params.id, router]);
+
   // Efeito para o cronômetro (apenas regressivo)
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -613,6 +716,12 @@ export default function Partida() {
           finalizarPartidaRef.current().then(success => {
             if (success) {
               toast.success('Ranking atualizado automaticamente!');
+              setPartidaFinalizada(true);
+              
+              // Abre o modal automaticamente após finalizar a partida
+              setTimeout(() => {
+                handleOpenModal();
+              }, 1500); // Pequeno delay para dar tempo das toast notifications
             }
           }).catch(error => {
             console.error('Erro ao atualizar ranking automaticamente:', error);
@@ -636,57 +745,11 @@ export default function Partida() {
         clearInterval(intervalId);
       }
     };
-  }, [rodando, minutos, segundos, determinarVencedor]);
-
-  const handleOpenModal = async () => {
-    try {
-      setLoading(true);
-      
-      const rankingAtualizado = await handleFinalizarPartida();
-      
-      if (!rankingAtualizado) {
-        toast.error('Erro ao atualizar o ranking');
-        return;
-      }
-
-      // Busca os times gerados da página anterior
-      const timesGeradosString = localStorage.getItem(`timesGerados_${params.id}`);
-      if (timesGeradosString) {
-        const timesGerados = JSON.parse(timesGeradosString) as Time[];
-        console.log('Times gerados encontrados:', timesGerados);
-        
-        // Reseta os gols e assistências dos times
-        const timesResetados = timesGerados.map(time => ({
-          ...time,
-          gols: 0,
-          jogadores: time.jogadores.map(j => ({
-            ...j,
-            gols: 0,
-            assistencias: 0
-          }))
-        }));
-
-        setTimesSalvos(timesResetados);
-        setTimesSelecionados(timesResetados.map(time => ({
-          id: time.id,
-          selecionado: false
-        })));
-        setOpenModal(true);
-      } else {
-        console.log('Nenhum time encontrado');
-        toast.error('Nenhum time disponível. Por favor, gere os times na página de confirmação.');
-        router.push(`/pelada/${params.id}/confirmar`);
-      }
-    } catch (error) {
-      console.error('Erro ao abrir modal:', error);
-      toast.error('Erro ao carregar times');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [rodando, minutos, segundos, determinarVencedor, handleOpenModal]);
 
   const handleCloseModal = () => {
     setOpenModal(false);
+    setPartidaFinalizada(false);
   };
 
   const handleSelecionarTime = (timeId: number) => {
@@ -763,9 +826,9 @@ export default function Partida() {
         return;
       }
 
-      // Filtra jogadores com IDs inválidos
-      const jogadoresTimeAValidos = novoTimeA.jogadores.filter(j => j.id && j.id !== 'undefined');
-      const jogadoresTimeBValidos = novoTimeB.jogadores.filter(j => j.id && j.id !== 'undefined');
+      // Filtra jogadores com IDs inválidos (considerando tanto id quanto uid)
+      const jogadoresTimeAValidos = novoTimeA.jogadores.filter(j => (j.id && j.id !== 'undefined') || (j.uid && j.uid !== 'undefined'));
+      const jogadoresTimeBValidos = novoTimeB.jogadores.filter(j => (j.id && j.id !== 'undefined') || (j.uid && j.uid !== 'undefined'));
 
       // Log para depuração se jogadores foram removidos
       if (novoTimeA.jogadores.length !== jogadoresTimeAValidos.length || 
@@ -781,7 +844,9 @@ export default function Partida() {
         ...novoTimeA,
         gols: 0,
         jogadores: jogadoresTimeAValidos.map(j => ({
-          ...j,
+          id: j.id || '',
+          uid: j.uid || '',
+          nome: j.nome,
           gols: 0,
           assistencias: 0
         }))
@@ -791,7 +856,9 @@ export default function Partida() {
         ...novoTimeB,
         gols: 0,
         jogadores: jogadoresTimeBValidos.map(j => ({
-          ...j,
+          id: j.id || '',
+          uid: j.uid || '',
+          nome: j.nome,
           gols: 0,
           assistencias: 0
         }))
@@ -799,21 +866,61 @@ export default function Partida() {
 
       // Salva os times selecionados para a partida
       const timesPartida = [timeAResetado, timeBResetado];
-      localStorage.setItem(`timesPartida_${params.id}`, JSON.stringify(timesPartida));
-
-      // Reseta estados
-      setMinutos(25);
-      setSegundos(0);
-      setTempoAcabou(false);
-      setRodando(false);
-
-      handleCloseModal();
       
-      // Recarrega a página para iniciar nova partida
-      window.location.reload();
+      // DEBUG: Log completo dos times antes de salvar
+      console.log('DEBUG: Times a serem salvos no localStorage:', JSON.stringify(timesPartida, null, 2));
+      
+      // SOLUÇÃO 1: Garantir que o ID da pelada esteja correto
+      const peladaId = params.id;
+      console.log('DEBUG: ID da pelada utilizado:', peladaId);
+      
+      // SOLUÇÃO 2: Salvar com diferentes nomes para redundância
+      localStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
+      localStorage.setItem(`timesPartidaBackup_${peladaId}`, JSON.stringify(timesPartida));
+      localStorage.setItem(`timesUltimos`, JSON.stringify(timesPartida)); // Nome genérico para backup
+      
+      // SOLUÇÃO 3: Usar sessionStorage também como backup
+      sessionStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
+      
+      // SOLUÇÃO 4: Salvar em uma variável global
+      try {
+        // @ts-expect-error - Adicionar ao objeto window para emergência
+        window.timesPartidaGlobal = timesPartida;
+      } catch (e) {
+        console.warn('DEBUG: Não foi possível salvar na variável global', e);
+      }
+      
+      // SOLUÇÃO 5: Atualizar no Firestore (opcional)
+      try {
+        if (peladaId && typeof peladaId === 'string') {
+          const peladaRef = doc(db, 'peladas', peladaId);
+          updateDoc(peladaRef, {
+            timesPartidaAtual: timesPartida
+          }).then(() => {
+            console.log('DEBUG: Times salvos no Firestore com sucesso');
+          }).catch(e => {
+            console.error('DEBUG: Erro ao salvar times no Firestore', e);
+          });
+        }
+      } catch (e) {
+        console.error('DEBUG: Erro ao atualizar times no Firestore', e);
+      }
+
+      // Atualiza os times e fecha o modal
+      setTimeA(timeAResetado);
+      setTimeB(timeBResetado);
+      setOpenModal(false);
+      
+      // Reseta o estado de partida finalizada
+      setPartidaFinalizada(false);
+      
+      // Reseta o cronômetro
+      handleResetCronometro();
+      
+      toast.success('Próxima partida iniciada!');
     } catch (error) {
       console.error('Erro ao salvar times:', error);
-      toast.error('Erro ao salvar os times');
+      toast.error('Erro ao iniciar nova partida');
     }
   };
 
@@ -1084,10 +1191,87 @@ export default function Partida() {
         Finalizar Partida
       </Fab>
 
-      {/* Modal de Times Gerados */}
+      {/* Modal de Finalizar Partida */}
       <Dialog open={openModal} onClose={handleCloseModal} maxWidth="md" fullWidth>
-        <DialogTitle>Times Gerados</DialogTitle>
+        <DialogTitle>
+          {partidaFinalizada ? 'Partida Finalizada' : 'Próxima Partida'}
+        </DialogTitle>
         <DialogContent>
+          {partidaFinalizada && resumoPartida.timeA && resumoPartida.timeB && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <h3 className="text-lg font-bold text-center mb-3">Resumo da Partida</h3>
+              
+              <div className="flex justify-center items-center gap-4 mb-4">
+                <div className="flex flex-col items-center">
+                  <div className="text-2xl font-bold" style={{ color: resumoPartida.timeA.cor }}>
+                    {resumoPartida.timeA.nome}
+                  </div>
+                  <div className="text-3xl font-bold">
+                    {resumoPartida.timeA.gols}
+                  </div>
+                </div>
+                
+                <div className="text-xl font-bold text-gray-500 mx-4">X</div>
+                
+                <div className="flex flex-col items-center">
+                  <div className="text-2xl font-bold" style={{ color: resumoPartida.timeB.cor }}>
+                    {resumoPartida.timeB.nome}
+                  </div>
+                  <div className="text-3xl font-bold">
+                    {resumoPartida.timeB.gols}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-center mb-4 font-medium">
+                {resumoPartida.vencedor === 'timeA' ? (
+                  <span className="text-green-600">{resumoPartida.timeA.nome} venceu!</span>
+                ) : resumoPartida.vencedor === 'timeB' ? (
+                  <span className="text-green-600">{resumoPartida.timeB.nome} venceu!</span>
+                ) : (
+                  <span className="text-blue-600">Partida empatada!</span>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-bold mb-2" style={{ color: resumoPartida.timeA.cor }}>
+                    {resumoPartida.timeA.nome} - Destaques
+                  </h4>
+                  <div className="space-y-1">
+                    {resumoPartida.timeA.jogadores
+                      .filter(j => j.gols > 0 || j.assistencias > 0)
+                      .sort((a, b) => (b.gols * 2 + b.assistencias) - (a.gols * 2 + a.assistencias))
+                      .slice(0, 3)
+                      .map((jogador, idx) => (
+                        <div key={`destaqueA-${idx}`} className="text-sm">
+                          {jogador.nome}: {jogador.gols} gols, {jogador.assistencias} assistências
+                        </div>
+                      ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="font-bold mb-2" style={{ color: resumoPartida.timeB.cor }}>
+                    {resumoPartida.timeB.nome} - Destaques
+                  </h4>
+                  <div className="space-y-1">
+                    {resumoPartida.timeB.jogadores
+                      .filter(j => j.gols > 0 || j.assistencias > 0)
+                      .sort((a, b) => (b.gols * 2 + b.assistencias) - (a.gols * 2 + a.assistencias))
+                      .slice(0, 3)
+                      .map((jogador, idx) => (
+                        <div key={`destaqueB-${idx}`} className="text-sm">
+                          {jogador.nome}: {jogador.gols} gols, {jogador.assistencias} assistências
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <h3 className="font-bold mb-4">Selecione os times para a próxima partida:</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
             {timesSalvos.map(time => {
               const selecionado = timesSelecionados.find(t => t.id === time.id)?.selecionado;

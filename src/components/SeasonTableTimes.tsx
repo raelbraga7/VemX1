@@ -6,28 +6,29 @@ import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
 
-interface RankingData {
-  pontos: number;
-  vitorias: number;
-  gols: number;
-  assistencias: number;
+interface RankingTimeData {
+  id: string;
   nome: string;
+  vitorias: number;
+  derrotas: number;
+  golsPro: number;
+  golsContra: number;
+  saldoGols: number;
+  pontos: number;
 }
 
-interface SeasonTableProps {
+interface SeasonTableTimesProps {
   peladaId: string;
   temporada?: {
     inicio: Timestamp;
     fim: Timestamp;
     nome: string;
     status: 'ativa' | 'encerrada' | 'aguardando';
-    tipo?: 'pelada' | 'time';
   };
   isOwner: boolean;
-  tipoTela?: 'pelada' | 'time';
 }
 
-export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = 'pelada' }: SeasonTableProps) {
+export default function SeasonTableTimes({ peladaId, temporada, isOwner }: SeasonTableTimesProps) {
   const [editando, setEditando] = useState(false);
   const [novaTemporada, setNovaTemporada] = useState({
     nome: temporada?.nome || '',
@@ -40,13 +41,11 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     minutos: 0,
     segundos: 0
   });
-  const [temporadaTimeAtiva, setTemporadaTimeAtiva] = useState(false);
   const [temporadaPeladaAtiva, setTemporadaPeladaAtiva] = useState(false);
-  const [showConfirmacao, setShowConfirmacao] = useState(false);
 
-  // Verificar se há uma temporada de time ou pelada ativa
+  // Verificar se há uma temporada de pelada ativa
   useEffect(() => {
-    const verificarTemporadasAtivas = async () => {
+    const verificarTemporadaPelada = async () => {
       if (peladaId) {
         try {
           const peladaRef = doc(db, 'peladas', peladaId);
@@ -54,27 +53,26 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
           
           if (peladaDoc.exists()) {
             const peladaData = peladaDoc.data();
-            const temTemporadaTimeAtiva = 
+            const temTemporadaPeladaAtiva = 
               peladaData.temporada && 
               peladaData.temporada.status === 'ativa' && 
-              peladaData.temporada.tipo === 'time';
+              (peladaData.temporada.tipo === 'pelada' || !peladaData.temporada.tipo);
             
-            const temTemporadaPeladaAtiva =
-              peladaData.temporada && 
-              peladaData.temporada.status === 'ativa' && 
-              (peladaData.temporada.tipo === 'pelada' || !peladaData.temporada.tipo); // Para compatibilidade
-            
-            setTemporadaTimeAtiva(temTemporadaTimeAtiva);
             setTemporadaPeladaAtiva(temTemporadaPeladaAtiva);
           }
         } catch (error) {
-          console.error('Erro ao verificar temporadas ativas:', error);
+          console.error('Erro ao verificar temporada de pelada:', error);
         }
       }
     };
 
-    verificarTemporadasAtivas();
+    verificarTemporadaPelada();
   }, [peladaId]);
+
+  // Função para formatar mensagem para o time campeão
+  const mensagemCampeao = (nomeTime: string) => {
+    return `🏅 ${nomeTime} é o grande campeão! Superaram todos os desafios e mostraram que têm alma de vencedor. Parabéns, guerreiros! 🏆🔥`;
+  };
 
   // Função para calcular o tempo restante
   const calcularTempoRestante = (dataFim: Timestamp) => {
@@ -109,17 +107,11 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     }
   };
 
-  // Atualiza o tempo restante a cada 1 segundo
+  // Atualiza o tempo restante a cada segundo
   useEffect(() => {
-    // Se não houver temporada ou se o tipo da temporada não coincidir com o tipo da tela, não mostre o cronômetro
     if (!temporada?.fim || !temporada.fim.seconds) return;
     
-    // Se estamos na tela de pelada, só mostrar temporada de pelada
-    // Se estamos na tela de time, só mostrar temporada de time
-    if (tipoTela === 'pelada' && temporada.tipo === 'time') return;
-    if (tipoTela === 'time' && temporada.tipo === 'pelada') return;
-    
-    // Verificar se a temporada já está encerrada e não enviar notificações novamente
+    // Verificar se a temporada já está encerrada
     if (temporada.status === 'encerrada') return;
 
     let foiProcessado = false; // Flag para evitar processamento duplicado
@@ -147,56 +139,66 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
           
           // Verifica se a temporada já foi encerrada para evitar duplicação
           if (peladaData?.temporada?.status === 'encerrada') {
-            clearInterval(intervalo); // Para completamente se já foi encerrada
+            clearInterval(intervalo);
             return; 
           }
 
-          if (peladaData?.ranking) {
-            // Verifica se há algum jogador no ranking
-            const jogadores = Object.entries(peladaData.ranking);
+          // Verifica o ranking de times e encontra o time campeão
+          if (peladaData?.rankingTimes) {
+            const times = Object.entries(peladaData.rankingTimes);
             
-            if (jogadores.length === 0) {
-              // Se não há jogadores no ranking, apenas encerra a temporada sem enviar notificação
+            if (times.length === 0) {
+              // Se não há times no ranking, apenas encerrar a temporada
               await updateDoc(peladaRef, {
-                'temporada.status': 'encerrada',
-                ranking: {},
+                'temporada.status': 'encerrada'
               });
               
-              toast.success('Temporada encerrada! Não houve jogadores classificados.');
+              toast.success('Temporada encerrada! Não houve times classificados.');
               clearInterval(intervalo);
               return;
             }
             
-            // Encontra o jogador com mais pontos
-            const melhorJogador = jogadores.reduce<{ id: string } & RankingData | null>((melhor, [jogadorId, dados]) => {
-              const jogadorDados = dados as RankingData;
-              return (!melhor || jogadorDados.pontos > melhor.pontos) 
-                ? { id: jogadorId, ...jogadorDados }
+            // Encontra o time com mais pontos
+            const timeCampeao = times.reduce<RankingTimeData & { id: string }>((melhor, [timeId, dados]) => {
+              const timeData = dados as RankingTimeData;
+              return (!melhor || timeData.pontos > melhor.pontos) 
+                ? { ...timeData, id: timeId }
                 : melhor;
-            }, null);
+            }, { id: '', nome: '', vitorias: 0, derrotas: 0, golsPro: 0, golsContra: 0, saldoGols: 0, pontos: 0 });
 
-            // Primeiro atualiza o status da temporada para evitar processamento duplicado
+            // Atualiza o status da temporada
             await updateDoc(peladaRef, {
-              'temporada.status': 'encerrada',
-              ranking: {},
+              'temporada.status': 'encerrada'
             });
             
-            // Só depois envia a notificação, se houver um campeão
-            if (melhorJogador) {
-              try {
-                await createPeladaNotification(
-                  melhorJogador.id,
-                  peladaId,
-                  '🏆 VemX1: Parabéns Campeão!',
-                  `Parabéns ${melhorJogador.nome}! Você foi o grande campeão da temporada "${temporada.nome}" com ${melhorJogador.pontos} pontos! 🎉\n\nSeus números impressionantes:\n• ${melhorJogador.vitorias} vitórias\n• ${melhorJogador.gols} gols\n• ${melhorJogador.assistencias} assistências\n\nContinue assim, você é uma lenda do VemX1! 🌟`
-                );
-              } catch (notificationError) {
-                console.error('Erro ao enviar notificação:', notificationError);
-                // Mesmo que falhe o envio de notificação, continuamos o processo
+            // Notifica os jogadores do time campeão
+            if (timeCampeao) {
+              // Buscar todos os jogadores do time campeão
+              const timeRef = doc(db, 'times', timeCampeao.id);
+              const timeDoc = await getDoc(timeRef);
+              
+              if (timeDoc.exists()) {
+                const timeData = timeDoc.data();
+                const jogadores = timeData.jogadores || [];
+                
+                // Enviar notificação para cada jogador do time
+                for (const jogador of jogadores) {
+                  try {
+                    await createPeladaNotification(
+                      jogador.id,
+                      peladaId,
+                      `🏆 VemX1: ${timeCampeao.nome} é Campeão!`,
+                      mensagemCampeao(timeCampeao.nome)
+                    );
+                  } catch (notificationError) {
+                    console.error('Erro ao enviar notificação para jogador:', notificationError);
+                    // Continua enviando para os outros jogadores mesmo se falhar para um
+                  }
+                }
+                
+                toast.success(`Temporada encerrada! ${timeCampeao.nome} é o campeão!`);
               }
             }
-
-            toast.success('Temporada encerrada! O ranking foi zerado.');
           }
           
           // Limpa o intervalo para parar completamente as verificações
@@ -212,11 +214,11 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     // Executa uma vez imediatamente
     atualizarTempo();
     
-    // Define um intervalo de 1 segundo para atualização em tempo real
+    // Define um intervalo de 1 segundo para atualização
     const intervalo = setInterval(atualizarTempo, 1000);
 
     return () => clearInterval(intervalo);
-  }, [temporada?.fim, temporada?.status, peladaId, temporada?.nome, tipoTela]);
+  }, [temporada?.fim, temporada?.status, peladaId, temporada?.nome]);
 
   const handleSalvar = async () => {
     try {
@@ -254,17 +256,11 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
         temporada: novaTemporadaData
       });
 
-      // Atualiza o estado local com os novos dados
-      const peladaDoc = await getDoc(peladaRef);
-      const peladaData = peladaDoc.data();
-      
-      if (peladaData?.temporada) {
-        // Força uma atualização da página para refletir as mudanças
-        window.location.reload();
-      }
-
       setEditando(false);
       toast.success('Temporada atualizada com sucesso!');
+      
+      // Atualiza a página para refletir as mudanças
+      window.location.reload();
     } catch (error) {
       console.error('Erro ao atualizar temporada:', error);
       toast.error('Erro ao atualizar temporada');
@@ -281,18 +277,16 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
         nome: `Temporada Rápida`,
         inicio: Timestamp.fromDate(agora),
         fim: Timestamp.fromDate(fimTemporada),
-        status: 'ativa' as const,
-        tipo: tipoTela
+        status: 'ativa' as const
       };
       
       const peladaRef = doc(db, 'peladas', peladaId);
       
       await updateDoc(peladaRef, {
-        temporada: novaTemporadaData,
-        ranking: {} // Resetar o ranking para nova temporada
+        temporada: novaTemporadaData
       });
       
-      toast.success(`Temporada de ${tipoTela} iniciada! Duração: 1 minuto`);
+      toast.success('Temporada iniciada! Duração: 1 minuto');
       
       // Atualiza a página para mostrar a contagem regressiva
       window.location.reload();
@@ -300,11 +294,6 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
       console.error('Erro ao iniciar temporada:', error);
       toast.error('Erro ao iniciar temporada automática');
     }
-  };
-
-  // Função para abrir o diálogo de confirmação
-  const handleConfirmarIniciarTemporada = () => {
-    setShowConfirmacao(true);
   };
 
   if (editando) {
@@ -368,118 +357,52 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
   }
 
   const temTemporadaAtiva = temporada && temporada.status === 'ativa';
-  // Só mostra temporada ativa se o tipo corresponder à tela atual
-  const temTemporadaAtivaNaTela = temTemporadaAtiva && 
-    ((tipoTela === 'pelada' && temporada?.tipo === 'pelada') || 
-     (tipoTela === 'time' && temporada?.tipo === 'time') ||
-     (tipoTela === 'pelada' && !temporada?.tipo)); // Para compatibilidade com temporadas antigas
-  
-  // Desabilitar botão baseado nas regras:
-  // 1. Se estamos na tela de pelada e há temporada de time ativa
-  // 2. Se estamos na tela de time e há temporada de pelada ativa
-  // 3. Se já existe uma temporada ativa do mesmo tipo da tela atual
-  const buttonDisabled = 
-    (tipoTela === 'pelada' && temporadaTimeAtiva) || 
-    (tipoTela === 'time' && temporadaPeladaAtiva) || 
-    temTemporadaAtivaNaTela;
+  // Botão desabilitado se há temporada ativa de pelada
+  const buttonDisabled = temporadaPeladaAtiva || temTemporadaAtiva;
   
   const botaoCss = buttonDisabled
     ? "px-4 py-2 text-sm bg-gray-400 text-white rounded-lg cursor-not-allowed"
     : "px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors";
-  
-  const botaoTooltip = 
-    tipoTela === 'pelada' && temporadaTimeAtiva 
-      ? "Aguarde a temporada de time terminar para iniciar uma temporada de pelada" 
-      : tipoTela === 'time' && temporadaPeladaAtiva
-        ? "Aguarde a temporada de pelada terminar para iniciar uma temporada de time"
-        : temTemporadaAtivaNaTela 
-          ? "Já existe uma temporada em andamento" 
-          : "";
+    
+  const botaoTooltip = temporadaPeladaAtiva
+    ? "Aguarde a temporada de pelada terminar para iniciar uma temporada de time"
+    : (temTemporadaAtiva ? "Já existe uma temporada em andamento" : "");
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
-      {/* Diálogo de confirmação */}
-      {showConfirmacao && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
-            <h3 className="text-xl font-bold mb-4">Confirmar início de temporada</h3>
-            <p className="mb-6">Tem certeza de que quer começar a temporada do time? Essa ação não poderá ser desfeita.</p>
-            <div className="flex justify-end space-x-3">
-              <button 
-                onClick={() => setShowConfirmacao(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={() => {
-                  setShowConfirmacao(false);
-                  handleIniciarTemporadaAutomatica();
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">{temporada?.nome || `Temporada de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}`}</h2>
+        <h2 className="text-2xl font-bold">{temporada?.nome || 'Temporada Atual'}</h2>
         {isOwner && (
           <div title={botaoTooltip}>
             <button
-              onClick={handleConfirmarIniciarTemporada}
+              onClick={temTemporadaAtiva ? () => setEditando(true) : handleIniciarTemporadaAutomatica}
               className={botaoCss}
               disabled={buttonDisabled}
             >
-              Iniciar Temporada
+              {temTemporadaAtiva ? 'Editar' : 'Iniciar Temporada'}
             </button>
           </div>
         )}
       </div>
 
-      {/* Mostra zeros quando não há temporada ativa para o tipo de tela atual */}
-      {!temTemporadaAtivaNaTela ? (
-        <div className="flex justify-center items-center space-x-8">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">000</div>
-            <div className="text-gray-600 uppercase text-sm">Dias</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">00</div>
-            <div className="text-gray-600 uppercase text-sm">Horas</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">00</div>
-            <div className="text-gray-600 uppercase text-sm">Min</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">00</div>
-            <div className="text-gray-600 uppercase text-sm">Seg</div>
-          </div>
+      <div className="flex justify-center items-center space-x-8">
+        <div className="text-center">
+          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.dias).padStart(3, '0')}</div>
+          <div className="text-gray-600 uppercase text-sm">Dias</div>
         </div>
-      ) : (
-        <div className="flex justify-center items-center space-x-8">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.dias).padStart(3, '0')}</div>
-            <div className="text-gray-600 uppercase text-sm">Dias</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.horas).padStart(2, '0')}</div>
-            <div className="text-gray-600 uppercase text-sm">Horas</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.minutos).padStart(2, '0')}</div>
-            <div className="text-gray-600 uppercase text-sm">Min</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.segundos).padStart(2, '0')}</div>
-            <div className="text-gray-600 uppercase text-sm">Seg</div>
-          </div>
+        <div className="text-center">
+          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.horas).padStart(2, '0')}</div>
+          <div className="text-gray-600 uppercase text-sm">Horas</div>
         </div>
-      )}
+        <div className="text-center">
+          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.minutos).padStart(2, '0')}</div>
+          <div className="text-gray-600 uppercase text-sm">Min</div>
+        </div>
+        <div className="text-center">
+          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.segundos).padStart(2, '0')}</div>
+          <div className="text-gray-600 uppercase text-sm">Seg</div>
+        </div>
+      </div>
 
       <div className="mt-6 text-sm text-gray-600">
         <div className="flex justify-between items-center py-2">

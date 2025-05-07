@@ -16,9 +16,15 @@ import {
   getDocs,
   query,
   where,
-  Timestamp
+  Timestamp,
+  getDoc
 } from 'firebase/firestore';
 import { toast } from 'react-hot-toast';
+import { DocumentData } from 'firebase/firestore';
+import SeasonTable from '@/components/SeasonTable';
+import PlayerCard from '@/components/PlayerCard';
+import { useJogadorStats } from '@/hooks/useJogadorStats';
+import { useJogadorTimeStats } from '@/hooks/useJogadorTimeStats';
 
 interface Jogador {
   id: string;
@@ -51,6 +57,29 @@ interface TimeSelecionado {
   name: string;
 }
 
+interface PeladaData {
+  id?: string;
+  nome: string;
+  ownerId: string;
+  players: string[];
+  codigo: string;
+  temporada?: {
+    inicio: Timestamp;
+    fim: Timestamp;
+    nome: string;
+    status: 'ativa' | 'encerrada' | 'aguardando';
+  }
+}
+
+interface RankingTimeUpdate {
+  vitorias?: number;
+  derrotas?: number;
+  golsPro?: number;
+  golsContra?: number;
+  saldoGols?: number;
+  pontos?: number;
+}
+
 export default function TimeSelecionado() {
   const { user } = useUser();
   const [notification, setNotification] = useState('');
@@ -60,6 +89,22 @@ export default function TimeSelecionado() {
   const [peladaId, setPeladaId] = useState<string | null>(null);
   const [peladaCodigo, setPeladaCodigo] = useState<string>('');
   const [timesSelecionados, setTimesSelecionados] = useState<TimeSelecionado[]>([]);
+  const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
+  const [jogadorSelecionado, setJogadorSelecionado] = useState<Jogador | null>(null);
+  const [modalAberta, setModalAberta] = useState<boolean>(false);
+  const [timeDoJogador, setTimeDoJogador] = useState<string | null>(null);
+  
+  // Buscar estatísticas gerais do jogador (pelada)
+  const { stats: jogadorStats } = useJogadorStats(
+    jogadorSelecionado?.id || '', 
+    peladaId
+  );
+  
+  // Buscar estatísticas específicas do jogador no time
+  const { stats: jogadorTimeStats } = useJogadorTimeStats(
+    jogadorSelecionado?.id || '',
+    timeDoJogador
+  );
 
   // Carregar a pelada do usuário e verificar se ele é o dono
   useEffect(() => {
@@ -76,13 +121,24 @@ export default function TimeSelecionado() {
         
         if (!snapshot.empty) {
           const peladaDoc = snapshot.docs[0];
-          const peladaData = peladaDoc.data();
+          const peladaDocData = peladaDoc.data();
+          
+          // Armazenar os dados completos da pelada
+          setPeladaData({
+            id: peladaDoc.id,
+            ...peladaDocData as PeladaData
+          });
+          
+          // Manter para compatibilidade com o código existente
           setPeladaId(peladaDoc.id);
-          setPeladaCodigo(peladaData.codigo || '');
-          setIsOwner(peladaData.ownerId === user.uid);
+          setPeladaCodigo(peladaDocData.codigo || '');
+          setIsOwner(peladaDocData.ownerId === user.uid);
 
           // Agora que temos o ID da pelada, podemos buscar os times
           buscarTimes(peladaDoc.id);
+          
+          // Verificar times existentes e adicionar ao ranking se necessário
+          await verificarTimesSemRanking(peladaDoc.id, peladaDocData);
         }
       } catch (error) {
         console.error('Erro ao carregar pelada:', error);
@@ -143,27 +199,85 @@ export default function TimeSelecionado() {
         pontos: 0
       };
 
-      // Verificar se o ranking já existe para esta pelada
-      const peladaSnapshot = await getDocs(query(collection(db, 'peladas'), where('id', '==', peladaId)));
-      if (!peladaSnapshot.empty) {
-        const peladaDoc = peladaSnapshot.docs[0];
+      // Obter o documento da pelada
+      const peladaDoc = await getDoc(peladaRef);
+      
+      if (peladaDoc.exists()) {
         const peladaData = peladaDoc.data();
         
-        // Se não existir o campo rankingTimes, criar um objeto vazio
+        // Objeto para armazenar as atualizações que serão aplicadas
+        let updateData: { [key: string]: RankingTimeUpdate } = {};
+        
+        // Se não existir o campo rankingTimes, inicializar com um objeto vazio
         if (!peladaData.rankingTimes) {
-          await updateDoc(peladaRef, {
-            rankingTimes: {}
-          });
+          updateData = { rankingTimes: {} };
+          // Aplicar a atualização inicial
+          await updateDoc(peladaRef, updateData);
         }
         
-        // Adicionar o time ao ranking
-        await updateDoc(peladaRef, {
-          [`rankingTimes.${timeId}`]: rankingTime
-        });
+        // Adicionar o time ao ranking com caminho específico
+        updateData = {};
+        updateData[`rankingTimes.${timeId}`] = rankingTime;
+        
+        // Aplicar a atualização do time
+        await updateDoc(peladaRef, updateData);
+        
+        console.log(`Time ${timeName} adicionado ao ranking da pelada ${peladaId}`);
+      } else {
+        console.error('Documento da pelada não encontrado');
+        toast.error('Erro ao adicionar time ao ranking: Pelada não encontrada');
       }
     } catch (error) {
       console.error('Erro ao adicionar time ao ranking:', error);
       toast.error('Erro ao adicionar time ao ranking');
+    }
+  };
+
+  // Função para verificar times existentes e adicioná-los ao ranking se necessário
+  const verificarTimesSemRanking = async (peladaId: string, peladaData: DocumentData) => {
+    try {
+      // Buscar todos os times da pelada
+      const timesRef = collection(db, 'times');
+      const q = query(timesRef, where('peladaId', '==', peladaId));
+      const timesSnapshot = await getDocs(q);
+      
+      if (timesSnapshot.empty) return;
+      
+      // Verificar o ranking existente
+      const rankingTimes = peladaData.rankingTimes || {};
+      const timesParaAdicionar: {id: string, nome: string}[] = [];
+      
+      // Identificar times que não estão no ranking
+      timesSnapshot.forEach((doc) => {
+        const timeData = doc.data();
+        if (!rankingTimes[doc.id]) {
+          timesParaAdicionar.push({
+            id: doc.id,
+            nome: timeData.name
+          });
+        }
+      });
+      
+      // Adicionar times ao ranking
+      if (timesParaAdicionar.length > 0) {
+        console.log(`Adicionando ${timesParaAdicionar.length} times existentes ao ranking`);
+        
+        const peladaRef = doc(db, 'peladas', peladaId);
+        
+        // Criar estrutura de ranking se não existir
+        if (!peladaData.rankingTimes) {
+          await updateDoc(peladaRef, { rankingTimes: {} });
+        }
+        
+        // Adicionar cada time ao ranking
+        for (const time of timesParaAdicionar) {
+          await adicionarTimeAoRanking(time.id, time.nome, peladaId);
+        }
+        
+        toast.success('Times existentes adicionados ao ranking');
+      }
+    } catch (error) {
+      console.error('Erro ao verificar times sem ranking:', error);
     }
   };
 
@@ -357,6 +471,19 @@ export default function TimeSelecionado() {
     window.location.href = `/pelada/${peladaId}/partida-time`;
   };
 
+  // Adicionar função para abrir a carta do jogador
+  const handleAbrirCartaJogador = (jogador: Jogador, timeId: string) => {
+    setJogadorSelecionado(jogador);
+    setTimeDoJogador(timeId);
+    setModalAberta(true);
+  };
+
+  // Adicionar função para fechar o modal
+  const handleFecharModal = () => {
+    setModalAberta(false);
+    setJogadorSelecionado(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -403,6 +530,18 @@ export default function TimeSelecionado() {
       )}
       
       <div className="container mx-auto px-4 py-6">
+        {/* Adicionando o componente de cronômetro da temporada no topo */}
+        {peladaId && (
+          <div className="mb-6">
+            <SeasonTable 
+              peladaId={peladaId} 
+              temporada={peladaData?.temporada} 
+              isOwner={isOwner}
+              tipoTela="time"
+            />
+          </div>
+        )}
+
         <div className="flex justify-between items-center mb-6">
           <div className="text-gray-600">Código da Pelada: {peladaCodigo}</div>
         </div>
@@ -486,7 +625,11 @@ export default function TimeSelecionado() {
               {team.jogadores.length > 0 ? (
                 <div className="bg-blue-50 p-6">
                   {team.jogadores.map((jogador) => (
-                    <div key={jogador.id} className="flex items-center mb-2">
+                    <div 
+                      key={jogador.id} 
+                      className="flex items-center mb-2 cursor-pointer hover:bg-blue-100 p-2 rounded-md transition-colors"
+                      onClick={() => handleAbrirCartaJogador(jogador, team.id)}
+                    >
                       <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mr-3">
                         {jogador.nome.substring(0, 2).toUpperCase()}
                       </div>
@@ -525,6 +668,33 @@ export default function TimeSelecionado() {
           </button>
         </div>
       </div>
+      
+      {/* Componente de carta do jogador */}
+      {jogadorSelecionado && (
+        <PlayerCard 
+          jogador={{
+            ...jogadorSelecionado,
+            vitorias: jogadorStats?.vitorias || 0,
+            gols: jogadorStats?.gols || 0,
+            assistencias: jogadorStats?.assistencias || 0,
+            pontos: jogadorStats?.pontos || 0,
+            jogos: jogadorStats?.jogos || 0,
+            derrotas: jogadorStats?.derrotas || 0,
+            empates: jogadorStats?.empates || 0
+          }}
+          timeStats={{
+            ...jogadorTimeStats,
+            vitorias: jogadorTimeStats?.vitorias || 0,
+            derrotas: jogadorTimeStats?.derrotas || 0,
+            gols: jogadorTimeStats?.gols || 0,
+            assistencias: jogadorTimeStats?.assistencias || 0,
+            pontos: jogadorTimeStats?.pontos || 0,
+            jogos: jogadorTimeStats?.jogos || 0
+          }}
+          aberta={modalAberta}
+          onClose={handleFecharModal}
+        />
+      )}
     </div>
   );
 } 

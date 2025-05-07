@@ -343,12 +343,15 @@ export default function Dashboard() {
           {/* Coluna da Direita (Ranking e Temporada) */}
           <div className="lg:col-span-3">
             {/* Season Table */}
-            {selectedPeladaId && peladaData && (
-              <SeasonTable 
-                peladaId={selectedPeladaId}
-                temporada={peladaData.temporada}
-                isOwner={isOwner}
-              />
+            {!loadingPelada && selectedPeladaId && peladaData && (
+              <div className="col-span-1 md:col-span-2">
+                <SeasonTable 
+                  peladaId={selectedPeladaId}
+                  temporada={peladaData.temporada}
+                  isOwner={isOwner}
+                  tipoTela="pelada"
+                />
+              </div>
             )}
 
             {/* Ranking Table */}

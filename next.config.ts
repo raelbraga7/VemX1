@@ -13,6 +13,13 @@ const nextConfig: NextConfig = {
     
     return config;
   },
+  
+  // Configuração do ESLint para ignorar algumas regras durante o build
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;

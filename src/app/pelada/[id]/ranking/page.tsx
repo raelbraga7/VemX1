@@ -1,12 +1,24 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/firebase/firebaseConfig';
+import { db } from '@/firebase/config';
 import { useParams } from 'next/navigation';
+
+interface RankingPlayer {
+  id?: string;
+  nome: string;
+  pontos: number;
+  vitorias: number;
+  derrotas: number;
+  golsPro: number;
+  golsContra: number;
+  saldoGols: number;
+}
 
 const RankingPage: React.FC = () => {
   const params = useParams();
   const [ranking, setRanking] = useState<RankingPlayer[]>([]);
-  const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,10 +65,6 @@ const RankingPage: React.FC = () => {
               setRanking([]);
             }
             
-            setPeladaData({
-              ...data,
-              id: params.id as string
-            });
             setLoading(false);
           } else {
             console.error('DEBUG: Documento da pelada não existe');
@@ -82,8 +90,61 @@ const RankingPage: React.FC = () => {
   }, [params.id]);
 
   return (
-    <div>
-      {/* Renderização do componente com base nos estados */}
+    <div className="container mx-auto p-4">
+      {loading && (
+        <div className="flex justify-center my-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {!loading && !error && (
+        <>
+          <h1 className="text-2xl font-bold mb-6">Ranking da Pelada</h1>
+          
+          {ranking.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              Nenhum jogador no ranking ainda. Jogue algumas partidas para começar a pontuar!
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="py-3 px-4 text-left">Pos.</th>
+                    <th className="py-3 px-4 text-left">Nome</th>
+                    <th className="py-3 px-4 text-center">Pts</th>
+                    <th className="py-3 px-4 text-center">V</th>
+                    <th className="py-3 px-4 text-center">D</th>
+                    <th className="py-3 px-4 text-center">GP</th>
+                    <th className="py-3 px-4 text-center">GC</th>
+                    <th className="py-3 px-4 text-center">SG</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranking.map((player, index) => (
+                    <tr key={player.id} className={index % 2 === 0 ? 'bg-gray-50' : ''}>
+                      <td className="py-3 px-4">{index + 1}</td>
+                      <td className="py-3 px-4 font-medium">{player.nome}</td>
+                      <td className="py-3 px-4 text-center font-bold">{player.pontos}</td>
+                      <td className="py-3 px-4 text-center">{player.vitorias}</td>
+                      <td className="py-3 px-4 text-center">{player.derrotas}</td>
+                      <td className="py-3 px-4 text-center">{player.golsPro}</td>
+                      <td className="py-3 px-4 text-center">{player.golsContra}</td>
+                      <td className="py-3 px-4 text-center">{player.saldoGols}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

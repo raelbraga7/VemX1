@@ -504,8 +504,11 @@ const useConvites = (
         nome: dadosAtuais.nome || peladaData.nome
       };
       
-      // Envia notificações para todos os jogadores não confirmados
-      const totalNotificados = await sendConfirmationRequestToAllPlayers(peladaData.id, peladaAtualizada);
+      // Enviar notificações para todos os jogadores
+      const totalNotificados = await sendConfirmationRequestToAllPlayers(
+        peladaData.id, 
+        peladaAtualizada.nome || 'Nova Pelada'
+      );
       
       if (totalNotificados && totalNotificados > 0) {
         toast.success(`${totalNotificados} solicitações de confirmação enviadas com sucesso!`);

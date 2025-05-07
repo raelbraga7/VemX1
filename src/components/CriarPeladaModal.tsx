@@ -30,11 +30,10 @@ export default function CriarPeladaModal({ isOpen, onClose, onSuccess }: CriarPe
 
       // Cria a pelada com configurações padrão
       const peladaData = {
-        nome: nomePelada,
+        nome: nomePelada.trim(),
         descricao: '',
         ownerId: auth.currentUser.uid,
         players: [auth.currentUser.uid],
-        // Inicializa o ranking com o criador
         ranking: {
           [auth.currentUser.uid]: {
             jogos: 0,
@@ -43,7 +42,8 @@ export default function CriarPeladaModal({ isOpen, onClose, onSuccess }: CriarPe
             empates: 0,
             gols: 0,
             assistencias: 0,
-            pontos: 0
+            pontos: 0,
+            nome: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || 'Usuário'
           }
         },
         createdAt: new Date(),
