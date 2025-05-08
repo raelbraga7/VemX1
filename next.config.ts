@@ -20,35 +20,6 @@ const nextConfig: NextConfig = {
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
-  
-  // Adicionar redirecionamentos para o webhook do Mercado Pago
-  async redirects() {
-    return [
-      // Redirecionamento do padrão do Mercado Pago para nosso endpoint App Router
-      {
-        source: '/webhook/mercadopago',
-        destination: '/api/webhook/mercadopago',
-        permanent: true,
-      },
-      // Versão alternativa com api no caminho
-      {
-        source: '/api/webhook/mercadopago',
-        destination: '/api/webhook/mercadopago',
-        permanent: true,
-      },
-      // Caminhos adicionais que o Mercado Pago pode tentar usar
-      {
-        source: '/webhooks/mercadopago',
-        destination: '/api/webhook/mercadopago',
-        permanent: true,
-      },
-      {
-        source: '/notifications/mercadopago',
-        destination: '/api/webhook/mercadopago',
-        permanent: true,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
