@@ -1,74 +1,120 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { db } from '@/firebase/config';
+import { doc, setDoc, collection } from 'firebase/firestore';
 
-// Desabilitar o parser de corpo padrão
+// Tipo da notificação do Mercado Pago
+interface MercadoPagoNotification {
+  action?: string;
+  api_version?: string;
+  data?: {
+    id?: string;
+    [key: string]: unknown;
+  };
+  date_created?: string;
+  id?: string;
+  live_mode?: boolean;
+  type?: string;
+  user_id?: number | string;
+  [key: string]: unknown;
+}
+
+// Desabilitar o bodyParser padrão para obter o corpo bruto da requisição
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: true, // Mudando para true para simplificar o processamento inicial
   },
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  console.log('======= WEBHOOK MERCADO PAGO =======');
-  console.log('Método:', req.method);
-  
-  // Para GET (testes)
+  console.log('[Webhook] Requisição recebida:', {
+    method: req.method,
+    url: req.url,
+    headers: {
+      'content-type': req.headers['content-type'],
+      'user-agent': req.headers['user-agent'],
+      host: req.headers.host,
+    }
+  });
+
+  // Responder a solicitações GET (útil para testes)
   if (req.method === 'GET') {
     return res.status(200).json({
-      status: 'success',
-      message: 'Webhook do Mercado Pago está operacional',
+      status: 'online',
+      message: 'Webhook do Mercado Pago está funcionando!',
       timestamp: new Date().toISOString()
     });
   }
-  
-  // Para OPTIONS (CORS)
+
+  // Responder a solicitações OPTIONS (CORS)
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-signature');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     return res.status(200).end();
   }
-  
-  // Aceitar somente POST
+
+  // Verificar se é uma solicitação POST
   if (req.method !== 'POST') {
+    console.log(`[Webhook] Método não suportado: ${req.method}`);
     res.setHeader('Allow', ['POST', 'GET', 'OPTIONS']);
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-  
+
   try {
-    // Capturar o corpo bruto
-    const rawBody = await new Promise<string>((resolve, reject) => {
-      let data = '';
-      req.on('data', chunk => {
-        data += chunk;
-      });
-      req.on('end', () => {
-        resolve(data);
-      });
-      req.on('error', err => {
-        reject(err);
-      });
-    });
+    // Log do corpo da requisição
+    console.log('[Webhook] Corpo da requisição:', JSON.stringify(req.body, null, 2));
     
-    console.log('PAYLOAD RECEBIDO:', rawBody);
+    const notification = req.body as MercadoPagoNotification;
     
-    // Parse do JSON
-    let data;
+    // Identificar o tipo de notificação (Mercado Pago usa 'type' ou 'action')
+    const eventType = notification.type || notification.action;
+    const resourceId = notification.data?.id || notification.id;
+    
+    console.log(`[Webhook] Evento: ${eventType}, ID: ${resourceId}`);
+    
+    // Salvar a notificação no Firestore para auditoria
     try {
-      data = JSON.parse(rawBody);
-      console.log('PAYLOAD PROCESSADO:', JSON.stringify(data, null, 2));
-    } catch (parseError) {
-      console.error('ERRO AO PROCESSAR JSON:', parseError);
-      return res.status(200).json({ success: true });
+      const notificationsRef = collection(db, 'mercadopago_webhooks');
+      await setDoc(doc(notificationsRef), {
+        type: eventType,
+        resourceId,
+        data: notification,
+        receivedAt: new Date(),
+        status: 'received'
+      });
+      console.log('[Webhook] Notificação salva no Firestore');
+    } catch (dbError) {
+      console.error('[Webhook] Erro ao salvar no Firestore:', dbError);
+      // Continuamos mesmo com erro no DB para não afetar a resposta ao Mercado Pago
     }
     
-    console.log('TIPO:', data.type || data.action);
-    console.log('ID:', data.data?.id || data.id);
+    // Processar com base no tipo de evento
+    if (eventType?.includes('payment')) {
+      console.log('[Webhook] Processando notificação de pagamento');
+      
+      // Implementar lógica específica para pagamentos aqui
+      // Por exemplo: atualizar status de assinatura, liberar acesso, etc.
+      
+    } else if (eventType?.includes('subscription') || eventType?.includes('preapproval')) {
+      console.log('[Webhook] Processando notificação de assinatura');
+      
+      // Implementar lógica específica para assinaturas aqui
+      
+    } else {
+      console.log(`[Webhook] Tipo de evento não processado especificamente: ${eventType}`);
+    }
     
-    // Sempre retornar 200 OK
+    // Sempre retornar 200 para o Mercado Pago
     return res.status(200).json({ success: true });
     
   } catch (error) {
-    console.error('ERRO NO PROCESSAMENTO:', error);
-    return res.status(200).json({ success: true });
+    console.error('[Webhook] Erro ao processar webhook:', error);
+    
+    // Importante: mesmo em caso de erro, retornamos 200
+    // Isso evita que o Mercado Pago considere o webhook como falho
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Received with errors, but acknowledging receipt' 
+    });
   }
 } 
