@@ -9,7 +9,7 @@ import Link from 'next/link';
 
 export default function EntrarNaPelada() {
   const searchParams = useSearchParams();
-  const peladaId = searchParams.get('id');
+  const peladaId = searchParams?.get('id') || null;
   const { user, loading: userLoading } = useUser();
   const router = useRouter();
   const { acceptInvite, loading: inviteLoading } = useInvite();

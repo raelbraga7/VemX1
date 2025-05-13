@@ -11,7 +11,7 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
+
     // Função para verificar se o usuário é administrador
     function isAdmin() {
       return isAuthenticated() && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
@@ -25,12 +25,6 @@ service cloud.firestore {
     // Função para verificar se o usuário está na lista de players
     function isInPlayers(players) {
       return players != null && players.hasAny([request.auth.uid]);
-    }
-
-    // Regras para a coleção de ativações manuais (importante para debug)
-    match /ativacoes_manuais/{docId} {
-      // Permitir qualquer operação (o Firebase Admin SDK precisa escrever aqui)
-      allow read, write: if true;
     }
 
     // Regras para a coleção users
@@ -57,8 +51,10 @@ service cloud.firestore {
     match /usuarios/{userId} {
       allow read: if isAuthenticated();
       // Importante: Permitir criação/atualização pelo próprio usuário OU por qualquer requisição quando envolve assinatura
-      allow create: if true; // Permitir criação a partir de qualquer origem (para o Admin SDK)
-      allow update: if true; // Permitir atualização a partir de qualquer origem (para o Admin SDK)
+      allow create: if isAuthenticated() || request.resource.data.keys().hasAny(['statusAssinatura', 'plano', 'dataAssinatura']);
+      allow update: if isAuthenticated() && userId == request.auth.uid || 
+                    // Permitir atualizações de assinatura mesmo sem autenticação (para o webhook)
+                    request.resource.data.diff(resource.data).affectedKeys().hasAny(['statusAssinatura', 'plano', 'dataAssinatura', 'dataExpiracao', 'mpPaymentId', 'provider', 'dataUltimaAtualizacao']);
     }
 
     // Regras para a coleção de notificações
@@ -126,7 +122,7 @@ service cloud.firestore {
     // Regras para a coleção de webhooks da Hotmart
     match /hotmart_webhooks/{docId} {
       allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.usuarioId);
-      allow create, write: if true; // Permitir escrita de qualquer origem para webhook
+      allow write: if false; // Apenas via API
     }
   }
 } 

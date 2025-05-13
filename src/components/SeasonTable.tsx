@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
@@ -40,41 +40,42 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     minutos: 0,
     segundos: 0
   });
-  const [temporadaTimeAtiva, setTemporadaTimeAtiva] = useState(false);
-  const [temporadaPeladaAtiva, setTemporadaPeladaAtiva] = useState(false);
   const [showConfirmacao, setShowConfirmacao] = useState(false);
+  
+  // Verificar se há temporada ativa
+  const temTemporadaAtivaNaTela = useMemo(() => {
+    if (!temporada) return false;
+    return (
+      temporada.status === 'ativa' && 
+      (tipoTela === 'pelada' ? !temporada.tipo || temporada.tipo === 'pelada' : temporada.tipo === 'time')
+    );
+  }, [temporada, tipoTela]);
 
-  // Verificar se há uma temporada de time ou pelada ativa
-  useEffect(() => {
-    const verificarTemporadasAtivas = async () => {
-      if (peladaId) {
-        try {
-          const peladaRef = doc(db, 'peladas', peladaId);
-          const peladaDoc = await getDoc(peladaRef);
-          
-          if (peladaDoc.exists()) {
-            const peladaData = peladaDoc.data();
-            const temTemporadaTimeAtiva = 
-              peladaData.temporada && 
-              peladaData.temporada.status === 'ativa' && 
-              peladaData.temporada.tipo === 'time';
-            
-            const temTemporadaPeladaAtiva =
-              peladaData.temporada && 
-              peladaData.temporada.status === 'ativa' && 
-              (peladaData.temporada.tipo === 'pelada' || !peladaData.temporada.tipo); // Para compatibilidade
-            
-            setTemporadaTimeAtiva(temTemporadaTimeAtiva);
-            setTemporadaPeladaAtiva(temTemporadaPeladaAtiva);
-          }
-        } catch (error) {
-          console.error('Erro ao verificar temporadas ativas:', error);
-        }
-      }
-    };
+  // Verificar se há uma temporada de pelada ativa
+  const temporadaPeladaAtiva = useMemo(() => {
+    if (!temporada) return false;
+    return temporada.status === 'ativa' && (!temporada.tipo || temporada.tipo === 'pelada');
+  }, [temporada]);
 
-    verificarTemporadasAtivas();
-  }, [peladaId]);
+  // Verificar se há uma temporada de time ativa  
+  const temporadaTimeAtiva = useMemo(() => {
+    if (!temporada) return false;
+    return temporada.status === 'ativa' && temporada.tipo === 'time';
+  }, [temporada]);
+
+  // Determinar se o botão deve estar desativado
+  const buttonDisabled = useMemo(() => {
+    if (!isOwner) return true; // Desativado se não for dono (o que já inclui verificação de assinatura)
+    
+    // Temporada de pelada não pode ser iniciada se já tiver temporada de time ativa
+    if (tipoTela === 'pelada' && temporadaTimeAtiva) return true;
+    
+    // Temporada de time não pode ser iniciada se já tiver temporada de pelada ativa
+    if (tipoTela === 'time' && temporadaPeladaAtiva) return true;
+    
+    // Não pode iniciar se já tiver temporada ativa do mesmo tipo
+    return temTemporadaAtivaNaTela;
+  }, [isOwner, tipoTela, temporadaTimeAtiva, temporadaPeladaAtiva, temTemporadaAtivaNaTela]);
 
   // Função para calcular o tempo restante
   const calcularTempoRestante = (dataFim: Timestamp) => {
@@ -367,22 +368,6 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     );
   }
 
-  const temTemporadaAtiva = temporada && temporada.status === 'ativa';
-  // Só mostra temporada ativa se o tipo corresponder à tela atual
-  const temTemporadaAtivaNaTela = temTemporadaAtiva && 
-    ((tipoTela === 'pelada' && temporada?.tipo === 'pelada') || 
-     (tipoTela === 'time' && temporada?.tipo === 'time') ||
-     (tipoTela === 'pelada' && !temporada?.tipo)); // Para compatibilidade com temporadas antigas
-  
-  // Desabilitar botão baseado nas regras:
-  // 1. Se estamos na tela de pelada e há temporada de time ativa
-  // 2. Se estamos na tela de time e há temporada de pelada ativa
-  // 3. Se já existe uma temporada ativa do mesmo tipo da tela atual
-  const buttonDisabled = 
-    (tipoTela === 'pelada' && temporadaTimeAtiva) || 
-    (tipoTela === 'time' && temporadaPeladaAtiva) || 
-    temTemporadaAtivaNaTela;
-  
   const botaoCss = buttonDisabled
     ? "px-4 py-2 text-sm bg-gray-400 text-white rounded-lg cursor-not-allowed"
     : "px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors";

@@ -105,7 +105,7 @@ export default function Partida() {
   const carregarTimesSalvos = useCallback(() => {
     try {
       // Busca os times gerados na página de confirmação
-      const timesPartidaString = localStorage.getItem(`timesPartida_${params.id}`);
+      const timesPartidaString = localStorage.getItem(`timesPartida_${params?.id}`);
       console.log('Buscando times da partida:', timesPartidaString);
       
       if (timesPartidaString) {
@@ -134,7 +134,7 @@ export default function Partida() {
     } catch (error) {
       console.error('Erro ao carregar times salvos:', error);
     }
-  }, [params.id]);
+  }, [params?.id]);
 
   // Carregar times salvos quando o componente montar
   useEffect(() => {
@@ -152,7 +152,7 @@ export default function Partida() {
         }
       });
       
-      const peladaId = params.id;
+      const peladaId = params?.id;
       console.log('DEBUG: ID da pelada para busca:', peladaId);
       
       // Tenta todas as fontes de dados em sequência:
@@ -230,7 +230,9 @@ export default function Partida() {
       // 7. Último recurso - timesGerados
       if (!timesString) {
         console.warn('DEBUG: Tentando buscar times alternativos em timesGerados_');
-        const timesGeradosString = localStorage.getItem(`timesGerados_${peladaId}`);
+        const timesGeradosString = localStorage.getItem(`timesGerados_${peladaId}`) ||
+          localStorage.getItem(`timesPartida_${peladaId}`) ||
+          '';
         
         if (timesGeradosString) {
           console.log('DEBUG: Times encontrados em timesGerados_');
@@ -296,13 +298,14 @@ export default function Partida() {
       setError('Erro ao carregar times');
       setLoading(false);
     }
-  }, [params.id]);
+  }, [params?.id]);
 
   // Adiciona listener para sincronização em tempo real do ranking
   useEffect(() => {
-    if (!params.id || typeof params.id !== 'string') return;
+    if (!params?.id || typeof params?.id !== 'string') return;
 
-    const peladaRef = doc(db, 'peladas', params.id);
+    const peladaRef = doc(db, 'peladas', params?.id);
+    
     const unsubscribe = onSnapshot(peladaRef, (doc) => {
       const data = doc.data() as PeladaData | undefined;
       if (data?.ranking) {
@@ -313,7 +316,7 @@ export default function Partida() {
     });
 
     return () => unsubscribe();
-  }, [params.id]);
+  }, [params?.id]);
 
   // Função para determinar o vencedor
   const determinarVencedor = useCallback((): Vencedor | null => {
@@ -356,7 +359,7 @@ export default function Partida() {
 
   // Definição da função handleFinalizarPartida
   const handleFinalizarPartida = useCallback(async () => {
-    if (!timeA || !timeB || !params.id || typeof params.id !== 'string') return false;
+    if (!timeA || !timeB || !params?.id || typeof params?.id !== 'string') return false;
 
     try {
       // Certificar-se de que todos os jogadores têm IDs válidos antes de continuar
@@ -375,7 +378,7 @@ export default function Partida() {
       const empate = timeAGols === timeBGols;
 
       // Busca o documento da pelada
-      const peladaRef = doc(db, 'peladas', params.id);
+      const peladaRef = doc(db, 'peladas', params?.id);
       const peladaDoc = await getDoc(peladaRef);
       const peladaData = peladaDoc.data();
 
@@ -516,10 +519,10 @@ export default function Partida() {
       return true;
     } catch (error) {
       console.error('Erro ao finalizar partida:', error);
-      toast.error('Erro ao atualizar o ranking');
+      toast.error('Erro ao finalizar a partida');
       return false;
     }
-  }, [timeA, timeB, params.id]);
+  }, [timeA, timeB, params?.id]);
   
   // Funções de manipulação
   const handleGol = useCallback((timeId: number, jogadorId: string, incremento: boolean = true) => {
@@ -642,8 +645,8 @@ export default function Partida() {
 
       // Preparar para a próxima partida
       // Busca os times gerados da página anterior com fallbacks
-      const timesGeradosString = localStorage.getItem(`timesGerados_${params.id}`) || 
-                                 localStorage.getItem(`timesPartida_${params.id}`) ||
+      const timesGeradosString = localStorage.getItem(`timesGerados_${params?.id}`) || 
+                                 localStorage.getItem(`timesPartida_${params?.id}`) ||
                                  localStorage.getItem(`timesUltimos`);
       
       if (timesGeradosString) {
@@ -677,19 +680,17 @@ export default function Partida() {
         } catch (parseError) {
           console.error('Erro ao processar times:', parseError);
           toast.error('Formato de times inválido');
+          router.push(`/pelada/${params?.id}/confirmar`);
         }
       } else {
-        console.log('Nenhum time encontrado');
-        toast.error('Nenhum time disponível. Por favor, gere os times na página de confirmação.');
-        router.push(`/pelada/${params.id}/confirmar`);
+        // Caso não encontre times, redireciona para página de confirmação
+        router.push(`/pelada/${params?.id}/confirmar`);
       }
     } catch (error) {
-      console.error('Erro ao abrir modal:', error);
-      toast.error('Erro ao carregar times');
-    } finally {
+      console.error('Erro ao finalizar partida:', error);
       setLoading(false);
     }
-  }, [handleFinalizarPartida, params.id, router]);
+  }, [handleFinalizarPartida, params?.id, router]);
 
   // Efeito para o cronômetro (apenas regressivo)
   useEffect(() => {
@@ -777,7 +778,7 @@ export default function Partida() {
 
   const handleEncerrarDia = async () => {
     try {
-      if (!params.id || typeof params.id !== 'string') {
+      if (!params?.id || typeof params.id !== 'string') {
         throw new Error('ID da pelada não encontrado');
       }
 
@@ -871,7 +872,7 @@ export default function Partida() {
       console.log('DEBUG: Times a serem salvos no localStorage:', JSON.stringify(timesPartida, null, 2));
       
       // SOLUÇÃO 1: Garantir que o ID da pelada esteja correto
-      const peladaId = params.id;
+      const peladaId = params?.id;
       console.log('DEBUG: ID da pelada utilizado:', peladaId);
       
       // SOLUÇÃO 2: Salvar com diferentes nomes para redundância
@@ -930,7 +931,7 @@ export default function Partida() {
         <div className="text-red-600 mb-4">{error}</div>
         <Button
           variant="contained"
-          onClick={() => router.push(`/pelada/${params.id}/confirmar`)}
+          onClick={() => router.push(`/pelada/${params?.id}/confirmar`)}
         >
           Voltar
         </Button>

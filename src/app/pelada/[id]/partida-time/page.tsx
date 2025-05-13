@@ -101,7 +101,7 @@ export default function PartidaTime() {
   // Carregar times do localStorage
   useEffect(() => {
     try {
-      const timesSelecionadosString = localStorage.getItem(`timesSelecionados_${params.id}`);
+      const timesSelecionadosString = localStorage.getItem(`timesSelecionados_${params?.id}`);
       if (!timesSelecionadosString) {
         setError('Nenhum time selecionado');
         return;
@@ -172,7 +172,7 @@ export default function PartidaTime() {
       setError('Erro ao carregar times selecionados');
       setLoading(false);
     }
-  }, [params.id]);
+  }, [params?.id]);
 
   // Função para determinar o vencedor
   const determinarVencedor = useCallback((): Vencedor | null => {
@@ -184,7 +184,7 @@ export default function PartidaTime() {
 
   // Definição da função handleFinalizarPartida
   const handleFinalizarPartida = useCallback(async () => {
-    if (!timeA || !timeB || !params.id || typeof params.id !== 'string') return false;
+    if (!timeA || !timeB || !params?.id || typeof params?.id !== 'string') return false;
 
     try {
       // Certificar-se de que todos os jogadores têm IDs válidos antes de continuar
@@ -210,7 +210,7 @@ export default function PartidaTime() {
       });
 
       // Referência para a pelada no Firestore
-      const peladaRef = doc(db, 'peladas', params.id);
+      const peladaRef = doc(db, 'peladas', params?.id);
       
       // Atualiza o ranking de times
       try {
@@ -453,7 +453,7 @@ export default function PartidaTime() {
       toast.success('Partida finalizada com sucesso!');
       
       // Limpar dados temporários do localStorage
-      localStorage.removeItem(`timesSelecionados_${params.id}`);
+      localStorage.removeItem(`timesSelecionados_${params?.id}`);
       
       // Redirecionar para a página de times
       setTimeout(() => {
@@ -466,7 +466,7 @@ export default function PartidaTime() {
       toast.error('Erro ao finalizar a partida');
       return false;
     }
-  }, [timeA, timeB, params.id, determinarVencedor, router]);
+  }, [timeA, timeB, params?.id, determinarVencedor, router]);
 
   // Funções de manipulação
   const handleGol = useCallback((timeId: string, jogadorId: string, incremento: boolean = true) => {

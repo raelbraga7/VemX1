@@ -24,7 +24,7 @@ const RankingPage: React.FC = () => {
 
   useEffect(() => {
     const loadPeladaData = async () => {
-      if (!params.id) {
+      if (!params?.id) {
         setError('ID da pelada não encontrado');
         setLoading(false);
         return;
@@ -32,14 +32,14 @@ const RankingPage: React.FC = () => {
 
       setLoading(true);
       try {
-        const peladaRef = doc(db, 'peladas', params.id as string);
+        const peladaRef = doc(db, 'peladas', params?.id as string);
         
         // Usar onSnapshot para obter dados em tempo real
         const unsubscribe = onSnapshot(peladaRef, (docSnapshot) => {
           if (docSnapshot.exists()) {
             const data = docSnapshot.data();
             console.log('DEBUG: Ranking carregado:', {
-              peladaId: params.id,
+              peladaId: params?.id,
               rankingSize: Object.keys(data.ranking || {}).length,
               timestamp: new Date().toISOString()
             });
@@ -87,7 +87,7 @@ const RankingPage: React.FC = () => {
     };
 
     loadPeladaData();
-  }, [params.id]);
+  }, [params?.id]);
 
   return (
     <div className="container mx-auto p-4">

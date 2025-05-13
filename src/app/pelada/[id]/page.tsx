@@ -119,7 +119,7 @@ export default function PaginaPelada() {
         {peladaData && (
           <div className="mb-8">
             <SeasonTable 
-              peladaId={params.id as string}
+              peladaId={params?.id as string}
               temporada={peladaData.temporada}
               isOwner={isOwner}
             />
@@ -129,7 +129,7 @@ export default function PaginaPelada() {
         {/* Ranking Table */}
         <div className="bg-black rounded-lg shadow-lg overflow-hidden">
           <h2 className="text-xl font-semibold mb-4">Ranking dos Jogadores</h2>
-          <RankingTable peladaId={params.id as string} />
+          <RankingTable peladaId={params?.id as string} />
         </div>
         
         {showModal && times.length > 0 && (
@@ -172,7 +172,7 @@ export default function PaginaPelada() {
             isOpen={showConfigModal}
             onClose={() => setShowConfigModal(false)}
             onSave={handleConfigSaved}
-            peladaId={params.id as string}
+            peladaId={params?.id as string}
           />
         )}
       </div>

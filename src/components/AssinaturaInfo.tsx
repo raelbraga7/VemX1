@@ -5,6 +5,7 @@ import { Button, Card, CardContent, Typography, Chip, Box, CircularProgress } fr
 import { InfoAssinatura, obterInfoAssinatura } from '@/firebase/assinaturaService';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'react-hot-toast';
+import { PLANOS } from '@/lib/planos';
 
 export default function AssinaturaInfo() {
   const { user } = useUser();
@@ -38,7 +39,7 @@ export default function AssinaturaInfo() {
     
     setActionLoading(true);
     try {
-      const response = await fetch('/api/subscription/cancel', {
+      const response = await fetch('/api/assinatura/cancelar', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,6 +124,9 @@ export default function AssinaturaInfo() {
     );
   }
 
+  // Obter os dados do plano
+  const planoInfo = PLANOS.PREMIUM;
+
   return (
     <Card variant="outlined" sx={{ mb: 4 }}>
       <CardContent>
@@ -142,7 +146,7 @@ export default function AssinaturaInfo() {
             Plano
           </Typography>
           <Typography variant="body1" fontWeight="medium">
-            {assinatura.plano === 'basico' ? 'Plano Básico - R$ 149,99/mês' : 'Plano Premium - R$ 259,99/mês'}
+            Plano Premium - R$ {planoInfo.preco}/mês
           </Typography>
         </Box>
         

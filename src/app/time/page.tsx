@@ -25,6 +25,9 @@ import SeasonTable from '@/components/SeasonTable';
 import PlayerCard from '@/components/PlayerCard';
 import { useJogadorStats } from '@/hooks/useJogadorStats';
 import { useJogadorTimeStats } from '@/hooks/useJogadorTimeStats';
+import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
+import { Dialog } from '@headlessui/react';
+import { PLANOS } from '@/lib/planos';
 
 interface Jogador {
   id: string;
@@ -93,6 +96,10 @@ export default function TimeSelecionado() {
   const [jogadorSelecionado, setJogadorSelecionado] = useState<Jogador | null>(null);
   const [modalAberta, setModalAberta] = useState<boolean>(false);
   const [timeDoJogador, setTimeDoJogador] = useState<string | null>(null);
+  const [temAssinaturaAtiva, setTemAssinaturaAtiva] = useState(false);
+  const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
+  const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
+  const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
   
   // Buscar estatísticas gerais do jogador (pelada)
   const { stats: jogadorStats } = useJogadorStats(
@@ -105,6 +112,25 @@ export default function TimeSelecionado() {
     jogadorSelecionado?.id || '',
     timeDoJogador
   );
+
+  // Verificar assinatura do usuário
+  useEffect(() => {
+    const verificarAssinatura = async () => {
+      if (!user?.uid) return;
+      
+      try {
+        setVerificandoAssinatura(true);
+        const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
+        setTemAssinaturaAtiva(assinaturaAtiva);
+      } catch (error) {
+        console.error('Erro ao verificar assinatura:', error);
+      } finally {
+        setVerificandoAssinatura(false);
+      }
+    };
+    
+    verificarAssinatura();
+  }, [user]);
 
   // Carregar a pelada do usuário e verificar se ele é o dono
   useEffect(() => {
@@ -292,6 +318,11 @@ export default function TimeSelecionado() {
       return;
     }
 
+    if (!temAssinaturaAtiva) {
+      toast.error('Assine um plano para criar times');
+      return;
+    }
+
     // Verificar se já atingiu o limite de 6 times
     if (teams.length >= 6) {
       toast.error('Limite máximo de 6 times atingido');
@@ -460,6 +491,11 @@ export default function TimeSelecionado() {
   };
 
   const handleIniciarPartida = () => {
+    if (!temAssinaturaAtiva) {
+      toast.error('Assine um plano para iniciar partidas');
+      return;
+    }
+
     if (timesSelecionados.length !== 2) {
       toast.error('Selecione exatamente 2 times para iniciar a partida!');
       return;
@@ -482,6 +518,32 @@ export default function TimeSelecionado() {
   const handleFecharModal = () => {
     setModalAberta(false);
     setJogadorSelecionado(null);
+  };
+
+  // Links para checkout da Hotmart (substitua pelos seus links reais)
+  const HOTMART_URLS = {
+    basico: 'https://pay.hotmart.com/M99700196W?off=r5di19vt',
+    premium: 'https://pay.hotmart.com/M99700196W?off=r5di19vt'
+  };
+
+  // Função para lidar com a escolha de plano
+  const handleCTA = async (plano: string) => {
+    if (!user) {
+      toast.error('Você precisa estar logado para assinar um plano.');
+      return;
+    }
+
+    setLoadingPlano(plano);
+
+    try {
+      // Redirecionar para a página de checkout da Hotmart
+      window.location.href = HOTMART_URLS[plano as 'basico' | 'premium'];
+    } catch (error) {
+      console.error('Erro na assinatura:', error);
+      toast.error('Falha ao iniciar o pagamento. Tente novamente.');
+    } finally {
+      setLoadingPlano(null);
+    }
   };
 
   if (loading) {
@@ -536,7 +598,7 @@ export default function TimeSelecionado() {
             <SeasonTable 
               peladaId={peladaId} 
               temporada={peladaData?.temporada} 
-              isOwner={isOwner}
+              isOwner={isOwner && temAssinaturaAtiva}
               tipoTela="time"
             />
           </div>
@@ -547,15 +609,23 @@ export default function TimeSelecionado() {
         </div>
         
         {isOwner && (
-          <button 
-            className="w-full bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-md flex items-center justify-center space-x-2 mb-8"
-            onClick={handleAddTeam}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-            <span>Novo Time</span>
-          </button>
+          <div className="relative group">
+            <button 
+              className={`w-full ${temAssinaturaAtiva ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-400 cursor-not-allowed'} text-white py-3 px-4 rounded-md flex items-center justify-center space-x-2 mb-8`}
+              onClick={temAssinaturaAtiva ? handleAddTeam : () => toast.error('Assine um plano para criar times')}
+              disabled={!temAssinaturaAtiva}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              <span>Novo Time</span>
+            </button>
+            {!temAssinaturaAtiva && !verificandoAssinatura && (
+              <div className="hidden group-hover:block absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-600 text-white p-2 rounded shadow-lg text-xs z-10 w-48 text-center">
+                Assine um plano para desbloquear
+              </div>
+            )}
+          </div>
         )}
         
         {teams.length === 0 ? (
@@ -654,9 +724,9 @@ export default function TimeSelecionado() {
         <div className="flex-1 mt-auto">
           <button 
             onClick={handleIniciarPartida}
-            disabled={timesSelecionados.length !== 2}
+            disabled={timesSelecionados.length !== 2 || !temAssinaturaAtiva}
             className={`py-3 px-4 rounded-md flex items-center justify-center mb-4 mt-auto transition-all duration-300 ${
-              timesSelecionados.length === 2
+              timesSelecionados.length === 2 && temAssinaturaAtiva
                 ? 'bg-green-500 hover:bg-green-600 text-white'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
@@ -668,6 +738,84 @@ export default function TimeSelecionado() {
           </button>
         </div>
       </div>
+      
+      {!temAssinaturaAtiva && !verificandoAssinatura && (
+        <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
+          <h3 className="font-bold mb-2">Acesso Limitado</h3>
+          <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
+          <button 
+            onClick={() => setIsPlanosModalOpen(true)}
+            className="w-full bg-white text-blue-600 py-2 px-4 rounded hover:bg-blue-100 transition-colors font-medium"
+          >
+            Ver Planos
+          </button>
+        </div>
+      )}
+      
+      {/* Modal de Planos */}
+      <Dialog open={isPlanosModalOpen} onClose={() => setIsPlanosModalOpen(false)} className="relative z-50">
+        <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
+        
+        <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
+          <Dialog.Panel className="w-full max-w-md mx-auto bg-black text-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="p-4 sm:p-6 text-center">
+              <Dialog.Title className="text-xl sm:text-2xl font-bold mb-4">
+                Assine o VemX1
+              </Dialog.Title>
+              
+              <div className="mx-auto">
+                {/* Plano Premium */}
+                <div className="bg-black/40 rounded-xl p-4 sm:p-6 border-2 border-[#1d4ed8] relative">
+                  <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-1 text-sm rounded-t-xl font-bold">
+                    Plano VemX1
+                  </div>
+                  <div className="text-xl font-bold mb-2 mt-6">Plano Premium</div>
+                  <div className="text-3xl font-bold mb-4">
+                    R${PLANOS.PREMIUM.preco}
+                    <span className="text-sm text-gray-400">/mês</span>
+                  </div>
+                  <ul className="text-left text-sm space-y-2 mb-4">
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Jogadores ILIMITADOS
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Peladas ILIMITADAS
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Estatísticas avançadas
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Suporte prioritário
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Cancele quando quiser
+                    </li>
+                  </ul>
+                  <button 
+                    onClick={() => handleCTA('premium')}
+                    disabled={loadingPlano === 'premium'}
+                    className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-4 py-3 w-full rounded-lg text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
+                  >
+                    {loadingPlano === 'premium' ? 'Processando...' : 'Assinar Agora'}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsPlanosModalOpen(false)}
+                className="mt-6 px-4 py-1 text-sm text-gray-300 hover:text-white"
+              >
+                Fechar
+              </button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
       
       {/* Componente de carta do jogador */}
       {jogadorSelecionado && (

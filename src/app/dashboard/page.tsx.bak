@@ -412,6 +412,7 @@ export default function Dashboard() {
 
   // Links para checkout da Hotmart (substitua pelos seus links reais)
   const HOTMART_URLS = {
+    basico: 'https://pay.hotmart.com/M99700196W?off=r5di19vt',
     premium: 'https://pay.hotmart.com/M99700196W?off=r5di19vt'
   };
 
@@ -426,7 +427,7 @@ export default function Dashboard() {
 
     try {
       // Redirecionar para a página de checkout da Hotmart
-      window.location.href = HOTMART_URLS[plano as 'premium'];
+      window.location.href = HOTMART_URLS[plano as 'basico' | 'premium'];
     } catch (error) {
       console.error('Erro ao iniciar checkout:', error);
       toast.error('Erro ao processar pagamento. Tente novamente.');
@@ -612,58 +613,92 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
         
         <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
-          <Dialog.Panel className="w-full max-w-md mx-auto bg-black text-white rounded-2xl shadow-xl overflow-hidden">
+          <Dialog.Panel className="w-full max-w-3xl mx-auto bg-black text-white rounded-2xl shadow-xl overflow-hidden">
             <div className="p-4 sm:p-6 text-center">
               <Dialog.Title className="text-xl sm:text-2xl font-bold mb-4">
-                Assine o VemX1
+                Escolha seu plano
               </Dialog.Title>
               
-              <div className="mx-auto">
-                {/* Plano Premium */}
-                <div className="bg-black/40 rounded-xl p-4 sm:p-6 border-2 border-[#1d4ed8] relative">
-                  <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-1 text-sm rounded-t-xl font-bold">
-                    Plano VemX1
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 mx-auto">
+                {/* Plano Básico */}
+                <div className="bg-black/40 rounded-xl p-3 sm:p-4 border border-[#1d4ed8]/20">
+                  <div className="text-lg font-bold mb-1">Plano Básico</div>
+                  <div className="text-2xl font-bold mb-2">
+                    R${PLANOS.BASICO.preco}
+                    <span className="text-sm text-gray-400">/mês</span>
                   </div>
-                  <div className="text-xl font-bold mb-2 mt-6">Plano Premium</div>
-                  <div className="text-3xl font-bold mb-4">
+                  <ul className="text-left text-sm space-y-1 mb-3">
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
+                      Inclui todas as funcionalidades
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
+                      Até 20 jogadores por pelada
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
+                      Até 5 peladas simultâneas
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
+                      Cancele quando quiser
+                    </li>
+                  </ul>
+                  <button 
+                    onClick={() => handleCTA('basico')}
+                    disabled={loadingPlano === 'basico'}
+                    className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-3 py-2 w-full rounded-lg text-sm font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
+                  >
+                    {loadingPlano === 'basico' ? 'Processando...' : 'Quero o Plano Básico'}
+                  </button>
+                </div>
+
+                {/* Plano Premium */}
+                <div className="bg-black/40 rounded-xl p-3 sm:p-4 border-2 border-[#1d4ed8] relative">
+                  <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-0.5 text-xs rounded-t-xl font-bold">
+                    Mais Popular
+                  </div>
+                  <div className="text-lg font-bold mb-1 mt-5">Plano Premium</div>
+                  <div className="text-2xl font-bold mb-2">
                     R${PLANOS.PREMIUM.preco}
                     <span className="text-sm text-gray-400">/mês</span>
                   </div>
-                  <ul className="text-left text-sm space-y-2 mb-4">
+                  <ul className="text-left text-sm space-y-1 mb-3">
                     <li className="flex items-center">
-                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
+                      Todas as funções básicas
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
                       Jogadores ILIMITADOS
                     </li>
                     <li className="flex items-center">
-                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
                       Peladas ILIMITADAS
                     </li>
                     <li className="flex items-center">
-                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
                       Estatísticas avançadas
                     </li>
                     <li className="flex items-center">
-                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      <span className="text-[#1d4ed8] mr-1">✓</span>
                       Suporte prioritário
-                    </li>
-                    <li className="flex items-center">
-                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                      Cancele quando quiser
                     </li>
                   </ul>
                   <button 
                     onClick={() => handleCTA('premium')}
                     disabled={loadingPlano === 'premium'}
-                    className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-4 py-3 w-full rounded-lg text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
+                    className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-3 py-2 w-full rounded-lg text-sm font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
                   >
-                    {loadingPlano === 'premium' ? 'Processando...' : 'Assinar Agora'}
+                    {loadingPlano === 'premium' ? 'Processando...' : 'Quero o Plano Premium'}
                   </button>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsPlanosModalOpen(false)}
-                className="mt-6 px-4 py-1 text-sm text-gray-300 hover:text-white"
+                className="mt-4 px-4 py-1 text-sm text-gray-300 hover:text-white"
               >
                 Fechar
               </button>

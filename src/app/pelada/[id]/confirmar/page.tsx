@@ -810,11 +810,11 @@ export default function ConfirmarPresenca() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const status = searchParams.get('status');
-  const convidadoPor = searchParams.get('convidadoPor');
+  const status = searchParams?.get('status') || null;
+  const convidadoPor = searchParams?.get('convidadoPor') || null;
   const [error, setError] = useState('');
   const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
-  const peladaId = params.id as string;
+  const peladaId = params?.id as string;
   const [isMounted, setIsMounted] = useState(true);
 
   // CORREÇÃO: Adicionar uma flag para forçar a atualização dos jogadores após confirmação
