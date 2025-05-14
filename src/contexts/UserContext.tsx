@@ -2,9 +2,9 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth, db } from '@/firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { User } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
+import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
 
 interface UserData {
   nome: string;
@@ -16,60 +16,109 @@ interface UserContextType {
   user: User | null;
   userData: UserData | null;
   loading: boolean;
-  existsInFirestore: boolean;
+  temAssinaturaAtiva: boolean;
+  verificandoAssinatura: boolean;
 }
 
 const UserContext = createContext<UserContextType>({
   user: null,
   userData: null,
   loading: true,
-  existsInFirestore: false,
+  temAssinaturaAtiva: false,
+  verificandoAssinatura: true,
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [existsInFirestore, setExistsInFirestore] = useState(false);
-  const router = useRouter();
+  const [temAssinaturaAtiva, setTemAssinaturaAtiva] = useState(false);
+  const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
 
+  // Efeito para autenticação e carregamento de dados básicos do usuário
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       setUser(user);
       
       if (user) {
         try {
-          // Verificar se o usuário existe no Firestore
           const userDoc = await getDoc(doc(db, 'users', user.uid));
-          
           if (userDoc.exists()) {
             setUserData(userDoc.data() as UserData);
-            setExistsInFirestore(true);
-          } else {
-            console.log(`[UserContext] Usuário autenticado (${user.uid}), mas não encontrado no Firestore.`);
-            setExistsInFirestore(false);
-            
-            // Se o usuário está autenticado mas não existe no Firestore,
-            // redirecionar para a página de cadastro para completar o perfil
-            router.push('/cadastro?autenticado=true');
           }
         } catch (error) {
-          console.error('[UserContext] Erro ao buscar dados do usuário:', error);
-          setExistsInFirestore(false);
+          console.error('Erro ao buscar dados do usuário:', error);
         }
       } else {
         setUserData(null);
-        setExistsInFirestore(false);
+        setTemAssinaturaAtiva(false); // Resetar status de assinatura quando não há usuário
       }
       
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, []);
+
+  // Efeito separado para monitorar o status da assinatura
+  useEffect(() => {
+    if (!user) return;
+    
+    console.log(`[UserContext] Configurando verificação de assinatura para usuário: ${user.uid}`);
+    setVerificandoAssinatura(true);
+    
+    // Verificação inicial
+    verificarAssinaturaAtiva(user.uid)
+      .then(assinaturaAtiva => {
+        console.log(`[UserContext] Verificação inicial da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
+        setTemAssinaturaAtiva(assinaturaAtiva);
+      })
+      .catch(error => {
+        console.error('[UserContext] Erro na verificação inicial da assinatura:', error);
+        setTemAssinaturaAtiva(false);
+      })
+      .finally(() => {
+        setVerificandoAssinatura(false);
+      });
+    
+    // Configurar listener para atualizações em tempo real do status da assinatura
+    const userRef = doc(db, 'usuarios', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
+      try {
+        if (docSnapshot.exists()) {
+          const userData = docSnapshot.data();
+          const statusAssinatura = userData?.statusAssinatura;
+          console.log(`[UserContext] Status da assinatura atualizado em tempo real: ${statusAssinatura}`);
+          
+          setTemAssinaturaAtiva(
+            statusAssinatura === 'ativa' || statusAssinatura === 'teste'
+          );
+        } else {
+          console.log(`[UserContext] Documento do usuário não encontrado no Firestore`);
+          setTemAssinaturaAtiva(false);
+        }
+      } catch (error) {
+        console.error('[UserContext] Erro ao processar atualização da assinatura:', error);
+        setTemAssinaturaAtiva(false);
+      } finally {
+        setVerificandoAssinatura(false);
+      }
+    }, (error) => {
+      console.error('[UserContext] Erro no listener da assinatura:', error);
+      setVerificandoAssinatura(false);
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
 
   return (
-    <UserContext.Provider value={{ user, userData, loading, existsInFirestore }}>
+    <UserContext.Provider value={{ 
+      user, 
+      userData, 
+      loading,
+      temAssinaturaAtiva,
+      verificandoAssinatura
+    }}>
       {children}
     </UserContext.Provider>
   );

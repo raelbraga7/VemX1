@@ -11,9 +11,7 @@ import SeasonTable from '@/components/SeasonTable';
 import { LogoutButton } from '@/components/LogoutButton';
 import Link from 'next/link';
 import InviteButton from '@/components/InviteButton';
-import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { toast } from 'react-hot-toast';
 
 interface Time {
   nome: string;
@@ -23,7 +21,7 @@ interface Time {
 }
 
 export default function PaginaPelada() {
-  const { user } = useUser();
+  const { user, temAssinaturaAtiva, verificandoAssinatura } = useUser();
   const params = useParams();
   const searchParams = useSearchParams();
   const [showModal, setShowModal] = useState(false);
@@ -33,8 +31,6 @@ export default function PaginaPelada() {
   const [times] = useState<Time[]>([]);
   const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
   const [isOwner, setIsOwner] = useState(false);
-  const [temAssinaturaAtiva, setTemAssinaturaAtiva] = useState(false);
-  const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
   const [bannerFechado, setBannerFechado] = useState(false);
 
   useEffect(() => {
@@ -44,52 +40,6 @@ export default function PaginaPelada() {
       setBannerFechado(bannerStatus === 'true');
     }
   }, []);
-
-  // Efeito para verificar a assinatura independentemente da pelada
-  useEffect(() => {
-    if (!user) return;
-    
-    // Limpar estado anterior para prevenir exibição incorreta enquanto carrega
-    setTemAssinaturaAtiva(false);
-    
-    // Verificação da assinatura somente para o dono da pelada
-    if (peladaData && peladaData.ownerId === user.uid) {
-      console.log('[PaginaPelada] Configurando verificação de assinatura para o dono da pelada');
-      
-      // Configurar listener para atualizações em tempo real da assinatura
-      const userRef = doc(db, 'usuarios', user.uid);
-      const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
-        try {
-          if (docSnapshot.exists()) {
-            const userData = docSnapshot.data();
-            const statusAssinatura = userData?.statusAssinatura;
-            console.log(`[PaginaPelada] Status da assinatura atualizado: ${statusAssinatura}`);
-            
-            // Atualiza o estado com base nos dados do Firestore
-            setTemAssinaturaAtiva(
-              statusAssinatura === 'ativa' || statusAssinatura === 'teste'
-            );
-          } else {
-            console.log(`[PaginaPelada] Documento do usuário não encontrado`);
-            setTemAssinaturaAtiva(false);
-          }
-        } catch (error) {
-          console.error('[PaginaPelada] Erro ao processar atualização da assinatura:', error);
-          setTemAssinaturaAtiva(false);
-        }
-      }, (error) => {
-        console.error('[PaginaPelada] Erro no listener de assinatura:', error);
-      });
-      
-      // Verificação inicial
-      verificarAssinatura(user.uid);
-      
-      // Cleanup
-      return () => unsubscribe();
-    } else {
-      setVerificandoAssinatura(false);
-    }
-  }, [user, peladaData]);
 
   const fecharBanner = () => {
     localStorage.setItem('bannerFechado', 'true');
@@ -131,20 +81,6 @@ export default function PaginaPelada() {
 
     init();
   }, [params?.id, searchParams, user?.uid]);
-
-  // Adicionando função para verificar assinatura
-  const verificarAssinatura = async (userId: string | undefined) => {
-    if (!userId) return;
-    
-    try {
-      const assinaturaAtiva = await verificarAssinaturaAtiva(userId);
-      setTemAssinaturaAtiva(assinaturaAtiva);
-    } catch (error) {
-      console.error('Erro ao verificar assinatura:', error);
-    } finally {
-      setVerificandoAssinatura(false);
-    }
-  };
 
   const handleConfigSaved = async (peladaId: string) => {
     setShowConfigModal(false);
@@ -210,13 +146,52 @@ export default function PaginaPelada() {
               <div className="space-y-4">
                 {peladaData?.ownerId === user?.uid && (
                   <>
-                    <button
-                      onClick={() => setShowConfigModal(true)}
-                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                    >
-                      Configurar Pelada
-                    </button>
-                    <InviteButton peladaId={params?.id as string} />
+                    <div className="relative group">
+                      <button
+                        onClick={() => temAssinaturaAtiva ? setShowConfigModal(true) : toast.error('Assine um plano para configurar sua pelada')}
+                        className={`w-full px-4 py-2 ${temAssinaturaAtiva ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'} text-white rounded-lg transition-colors`}
+                        disabled={!temAssinaturaAtiva}
+                      >
+                        Configurar Pelada
+                      </button>
+                      {!temAssinaturaAtiva && !verificandoAssinatura && (
+                        <div className="hidden group-hover:block absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-600 text-white p-2 rounded shadow-lg text-xs z-10 w-48 text-center">
+                          Assine um plano para desbloquear
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="relative group">
+                      {temAssinaturaAtiva ? (
+                        <InviteButton peladaId={params?.id as string} />
+                      ) : (
+                        <button
+                          onClick={() => toast.error('Assine um plano para convidar jogadores')}
+                          className="w-full inline-flex items-center justify-center px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
+                          disabled={true}
+                        >
+                          <svg
+                            className="h-5 w-5 mr-2"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                            />
+                          </svg>
+                          Copiar Link de Convite
+                        </button>
+                      )}
+                      {!temAssinaturaAtiva && !verificandoAssinatura && (
+                        <div className="hidden group-hover:block absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-600 text-white p-2 rounded shadow-lg text-xs z-10 w-48 text-center">
+                          Assine um plano para desbloquear
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -231,7 +206,8 @@ export default function PaginaPelada() {
                 <SeasonTable 
                   peladaId={params?.id as string}
                   temporada={peladaData.temporada}
-                  isOwner={isOwner}
+                  isOwner={isOwner && temAssinaturaAtiva}
+                  tipoTela="pelada"
                 />
               </div>
             )}

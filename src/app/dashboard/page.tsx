@@ -83,23 +83,26 @@ const clearAllListeners = () => {
   activeListeners.length = 0;
 };
 
+// Verificar o tipo de Notification no dashboard
+interface NotificationWithId extends Notification {
+  id: string;
+}
+
 export default function Dashboard() {
-  const { user, loading } = useUser();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const { user, loading, temAssinaturaAtiva, verificandoAssinatura } = useUser();
+  const [selectedPeladaId, setSelectedPeladaId] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [selectedPeladaId, setSelectedPeladaId] = useState<string | null>(null);
-  const [loadingPelada, setLoadingPelada] = useState(true);
-  const [isOwner, setIsOwner] = useState(false);
-  const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
-  const [notifications, setNotifications] = useState<Array<Notification & { id: string }>>([]);
-  const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
-  const [temAssinaturaAtiva, setTemAssinaturaAtiva] = useState(false);
-  const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
-  const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
+  const [loadingPelada, setLoadingPelada] = useState(true);
+  const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
+  const router = useRouter();
+  const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationWithId[]>([]);
   const [bannerFechado, setBannerFechado] = useState(false);
+  const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -161,64 +164,6 @@ export default function Dashboard() {
       }
     }
   }, [searchParams, user, toast]);
-
-  // Verificar assinatura do usuário separadamente
-  useEffect(() => {
-    if (!user) return;
-    
-    // Limpar estado anterior para prevenir exibição incorreta enquanto carrega
-    setTemAssinaturaAtiva(false);
-    
-    // Função para verificar assinatura
-    const verificarAssinaturaDoUsuario = async () => {
-      try {
-        console.log(`[Dashboard] Verificando assinatura para o usuário ${user.uid}`);
-        setVerificandoAssinatura(true);
-        const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-        console.log(`[Dashboard] Status da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-        setTemAssinaturaAtiva(assinaturaAtiva);
-      } catch (error) {
-        console.error('[Dashboard] Erro ao verificar assinatura:', error);
-        setTemAssinaturaAtiva(false);
-      } finally {
-        setVerificandoAssinatura(false);
-      }
-    };
-
-    // Configurar listener para atualizações em tempo real da assinatura
-    const userRef = doc(db, 'usuarios', user.uid);
-    const unsubscribe = onSnapshot(userRef, async (doc) => {
-      try {
-        if (doc.exists()) {
-          const userData = doc.data();
-          const statusAssinatura = userData?.statusAssinatura;
-          console.log(`[Dashboard] Status da assinatura atualizado: ${statusAssinatura}`);
-          
-          // Atualiza o estado com base nos dados do Firestore
-          setTemAssinaturaAtiva(
-            statusAssinatura === 'ativa' || statusAssinatura === 'teste'
-          );
-        } else {
-          // Se o documento não existir, define como falso
-          console.log(`[Dashboard] Documento do usuário não encontrado`);
-          setTemAssinaturaAtiva(false);
-        }
-      } catch (error) {
-        console.error('[Dashboard] Erro ao processar atualização da assinatura:', error);
-        setTemAssinaturaAtiva(false);
-      }
-    }, (error) => {
-      console.error('[Dashboard] Erro no listener de assinatura:', error);
-    });
-    
-    registerListener(unsubscribe);
-    
-    // Verificação inicial em caso de problemas com o listener
-    verificarAssinaturaDoUsuario();
-    
-    // Cleanup: o listener será limpo pela função clearAllListeners() no useEffect de limpeza global
-    
-  }, [user]);
 
   useEffect(() => {
     const carregarPeladaRecente = async () => {

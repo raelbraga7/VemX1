@@ -25,7 +25,6 @@ import SeasonTable from '@/components/SeasonTable';
 import PlayerCard from '@/components/PlayerCard';
 import { useJogadorStats } from '@/hooks/useJogadorStats';
 import { useJogadorTimeStats } from '@/hooks/useJogadorTimeStats';
-import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
 import { Dialog } from '@headlessui/react';
 import { PLANOS } from '@/lib/planos';
 
@@ -84,7 +83,7 @@ interface RankingTimeUpdate {
 }
 
 export default function TimeSelecionado() {
-  const { user } = useUser();
+  const { user, temAssinaturaAtiva, verificandoAssinatura } = useUser();
   const [notification, setNotification] = useState('');
   const [teams, setTeams] = useState<Time[]>([]);
   const [isOwner, setIsOwner] = useState(false);
@@ -96,8 +95,6 @@ export default function TimeSelecionado() {
   const [jogadorSelecionado, setJogadorSelecionado] = useState<Jogador | null>(null);
   const [modalAberta, setModalAberta] = useState<boolean>(false);
   const [timeDoJogador, setTimeDoJogador] = useState<string | null>(null);
-  const [temAssinaturaAtiva, setTemAssinaturaAtiva] = useState(false);
-  const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
   const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
   
@@ -112,63 +109,6 @@ export default function TimeSelecionado() {
     jogadorSelecionado?.id || '',
     timeDoJogador
   );
-
-  // Verificar assinatura do usuário
-  const verificarAssinatura = async () => {
-    if (!user?.uid) return;
-    
-    try {
-      console.log(`[TimeSelecionado] Verificando assinatura para o usuário ${user.uid}`);
-      setVerificandoAssinatura(true);
-      const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-      console.log(`[TimeSelecionado] Status da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-      setTemAssinaturaAtiva(assinaturaAtiva);
-    } catch (error) {
-      console.error('[TimeSelecionado] Erro ao verificar assinatura:', error);
-      setTemAssinaturaAtiva(false);
-    } finally {
-      setVerificandoAssinatura(false);
-    }
-  };
-
-  // Efeito para verificar a assinatura independentemente da pelada
-  useEffect(() => {
-    if (!user) return;
-    
-    // Limpar estado anterior para prevenir exibição incorreta enquanto carrega
-    setTemAssinaturaAtiva(false);
-    
-    // Configurar listener para atualizações em tempo real da assinatura
-    const userRef = doc(db, 'usuarios', user.uid);
-    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
-      try {
-        if (docSnapshot.exists()) {
-          const userData = docSnapshot.data();
-          const statusAssinatura = userData?.statusAssinatura;
-          console.log(`[TimeSelecionado] Status da assinatura atualizado: ${statusAssinatura}`);
-          
-          // Atualiza o estado com base nos dados do Firestore
-          setTemAssinaturaAtiva(
-            statusAssinatura === 'ativa' || statusAssinatura === 'teste'
-          );
-        } else {
-          console.log(`[TimeSelecionado] Documento do usuário não encontrado`);
-          setTemAssinaturaAtiva(false);
-        }
-      } catch (error) {
-        console.error('[TimeSelecionado] Erro ao processar atualização da assinatura:', error);
-        setTemAssinaturaAtiva(false);
-      }
-    }, (error) => {
-      console.error('[TimeSelecionado] Erro no listener de assinatura:', error);
-    });
-    
-    // Verificação inicial
-    verificarAssinatura();
-    
-    // Cleanup
-    return () => unsubscribe();
-  }, [user]);
 
   // Carregar a pelada do usuário e verificar se ele é o dono
   useEffect(() => {
