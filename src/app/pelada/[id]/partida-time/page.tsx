@@ -94,6 +94,7 @@ export default function PartidaTime() {
   const [rodando, setRodando] = useState(false);
   const [tempoAcabou, setTempoAcabou] = useState(false);
   const [openModal, setOpenModal] = useState(false);
+  const [rankingAtualizado, setRankingAtualizado] = useState(false);
   
   // Referência para a função de finalizar partida
   const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
@@ -608,15 +609,24 @@ export default function PartidaTime() {
             toast('Tempo esgotado!');
           }
           
-          // Finalize a partida automaticamente
-          finalizarPartidaRef.current().then(success => {
-            if (success) {
-              // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
-            } else {
-              // Falha ao finalizar automaticamente
-              toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
-            }
-          });
+          // Finalize a partida automaticamente apenas se ainda não foi atualizada
+          if (!rankingAtualizado) {
+            finalizarPartidaRef.current().then(success => {
+              if (success) {
+                setRankingAtualizado(true); // Marcar como já atualizado para evitar duplicação
+                // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
+                toast.success('Ranking atualizado com sucesso!');
+              } else {
+                // Falha ao finalizar automaticamente
+                toast.error('Erro ao atualizar ranking. Por favor, use o botão Finalizar Partida.');
+              }
+            }).catch(error => {
+              console.error('Erro ao finalizar automaticamente:', error);
+              toast.error('Falha ao atualizar ranking. Por favor, use o botão Finalizar Partida.');
+            });
+          } else {
+            console.log('Ranking já foi atualizado anteriormente. Ignorando atualização duplicada.');
+          }
           
           return;
         }
@@ -633,7 +643,7 @@ export default function PartidaTime() {
     return () => {
       clearInterval(intervalId);
     };
-  }, [rodando, minutos, segundos, determinarVencedor]);
+  }, [rodando, minutos, segundos, determinarVencedor, rankingAtualizado]);
 
   if (loading) {
     return (
@@ -833,9 +843,16 @@ export default function PartidaTime() {
               variant="extended" 
               color="secondary" 
               onClick={async () => {
-                const rankingAtualizado = await handleFinalizarPartida();
-                if (rankingAtualizado) {
-                  toast.success('Partida finalizada e ranking atualizado!');
+                // Verifica se o ranking já foi atualizado para evitar duplicação
+                if (!rankingAtualizado) {
+                  const success = await handleFinalizarPartida();
+                  if (success) {
+                    setRankingAtualizado(true);
+                    toast.success('Partida finalizada e ranking atualizado!');
+                  }
+                } else {
+                  toast.success('Ranking já foi atualizado. Redirecionando...');
+                  router.push(`/time`);
                 }
               }}
               sx={{ px: 3 }}

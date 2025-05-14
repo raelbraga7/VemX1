@@ -101,6 +101,9 @@ export default function Partida() {
   // Referência para a função de finalizar partida
   const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
 
+  // Adicionar um estado para controlar se o ranking já foi atualizado
+  const [rankingAtualizado, setRankingAtualizado] = useState(false);
+
   // Função para carregar os times salvos
   const carregarTimesSalvos = useCallback(() => {
     try {
@@ -656,12 +659,20 @@ export default function Partida() {
       setLoading(true);
       
       // Tenta finalizar a partida e atualizar o ranking, mas não bloqueia se falhar
-      try {
-        const rankingAtualizado = await handleFinalizarPartida();
-        console.log('Ranking atualizado com sucesso:', rankingAtualizado);
-      } catch (rankingError) {
-        console.error('Erro ao tentar atualizar o ranking:', rankingError);
-        // Continua mesmo com erro no ranking
+      // Verifica se o ranking já foi atualizado para não duplicar
+      if (!rankingAtualizado) {
+        try {
+          const rankingAtualizado = await handleFinalizarPartida();
+          console.log('Ranking atualizado com sucesso:', rankingAtualizado);
+          if (rankingAtualizado) {
+            setRankingAtualizado(true); // Marca como atualizado para evitar duplicações
+          }
+        } catch (rankingError) {
+          console.error('Erro ao tentar atualizar o ranking:', rankingError);
+          // Continua mesmo com erro no ranking
+        }
+      } else {
+        console.log('Ranking já foi atualizado anteriormente, ignorando atualização duplicada');
       }
 
       // Preparar para a próxima partida
@@ -747,28 +758,44 @@ export default function Partida() {
             toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
           }
           
-          // Atualiza automaticamente o ranking quando o tempo acabar
-          finalizarPartidaRef.current().then(success => {
-            console.log('Resultado da finalização automática da partida:', success);
-            toast.success('Ranking atualizado automaticamente!');
-            setPartidaFinalizada(true);
-            
-            // Abre o modal automaticamente após finalizar a partida
-            setTimeout(() => {
-              handleOpenModal();
-              console.log('Modal aberto automaticamente após finalizar partida');
-            }, 1500); // Pequeno delay para dar tempo das toast notifications
-          }).catch(error => {
-            console.error('Erro ao atualizar ranking automaticamente:', error);
-            toast.error('Erro ao atualizar ranking automaticamente. Abrindo modal mesmo assim.');
-            
-            // Mesmo com erro, tenta abrir o modal
+          // Atualiza automaticamente o ranking quando o tempo acabar, apenas se ainda não foi atualizado
+          if (!rankingAtualizado) {
+            finalizarPartidaRef.current().then(success => {
+              console.log('Resultado da finalização automática da partida:', success);
+              
+              if (success) {
+                toast.success('Ranking atualizado automaticamente!');
+                setRankingAtualizado(true); // Marca como atualizado para evitar duplicações
+                setPartidaFinalizada(true);
+                
+                // Abre o modal automaticamente após finalizar a partida
+                setTimeout(() => {
+                  handleOpenModal();
+                  console.log('Modal aberto automaticamente após finalizar partida');
+                }, 1500); // Pequeno delay para dar tempo das toast notifications
+              } else {
+                // Se falhou, permite que o usuário tente manualmente
+                toast.error('Falha ao atualizar ranking automaticamente. Tente finalizar manualmente.');
+              }
+            }).catch(error => {
+              console.error('Erro ao atualizar ranking automaticamente:', error);
+              toast.error('Erro ao atualizar ranking automaticamente. Abrindo modal mesmo assim.');
+              
+              // Mesmo com erro, tenta abrir o modal
+              setTimeout(() => {
+                setPartidaFinalizada(true);
+                handleOpenModal();
+                console.log('Modal aberto mesmo após erro na finalização');
+              }, 1500);
+            });
+          } else {
+            console.log('Ranking já foi atualizado, ignorando atualização automática duplicada');
+            // Se o ranking já foi atualizado, apenas abre o modal
             setTimeout(() => {
               setPartidaFinalizada(true);
               handleOpenModal();
-              console.log('Modal aberto mesmo após erro na finalização');
             }, 1500);
-          });
+          }
           
           return;
         }
