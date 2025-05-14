@@ -7,7 +7,7 @@ import { auth } from '@/firebase/config';
 import { useInvite } from '@/hooks/useInvite';
 import { useUser } from '@/contexts/UserContext';
 import Link from 'next/link';
-import { signInWithGoogle } from '@/firebase/auth';
+import { signInWithGoogle, getGoogleRedirectResult } from '@/firebase/auth';
 
 // Contador improvisado para evitar bloqueio por muitas tentativas
 let tentativasDeLogin = 0;
@@ -54,6 +54,37 @@ export default function Login() {
     if (user && !userLoading && !peladaId) {
       router.push('/dashboard');
     }
+  }, [user, userLoading, router, peladaId]);
+
+  // Verificar se há resultado de redirecionamento do Google ao carregar
+  useEffect(() => {
+    const verificarRedirecionamentoGoogle = async () => {
+      try {
+        // Apenas tenta obter o resultado se o usuário não estiver logado
+        if (!user && !userLoading) {
+          console.log('Verificando se há resultado de redirecionamento do Google...');
+          setLoading(true);
+          const googleUser = await getGoogleRedirectResult();
+          
+          if (googleUser) {
+            console.log('Login com Google por redirecionamento bem-sucedido:', googleUser.uid);
+            
+            // Se não tiver peladaId, redireciona para o dashboard
+            if (!peladaId) {
+              router.push('/dashboard');
+            }
+            // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao processar redirecionamento do Google:', err);
+        setError('Erro ao processar login com Google. Tente novamente.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    verificarRedirecionamentoGoogle();
   }, [user, userLoading, router, peladaId]);
 
   // Contagem regressiva quando bloqueado
@@ -174,16 +205,24 @@ export default function Login() {
     
     try {
       const googleUser = await signInWithGoogle();
-      console.log('Login com Google realizado com sucesso:', googleUser.uid);
-      
-      // Resetar tentativas após sucesso
-      tentativasDeLogin = 0;
-      
-      // Se não tiver peladaId, redireciona para o dashboard
-      if (!peladaId) {
-        router.push('/dashboard');
+      // Em caso de redirecionamento, googleUser será null
+      // O resultado será processado no useEffect ao retornar
+      if (googleUser) {
+        console.log('Login com Google realizado com sucesso via popup:', googleUser.uid);
+        
+        // Resetar tentativas após sucesso
+        tentativasDeLogin = 0;
+        
+        // Se não tiver peladaId, redireciona para o dashboard
+        if (!peladaId) {
+          router.push('/dashboard');
+        }
+        // Se tiver peladaId, o useEffect vai cuidar de processar o convite
+      } else {
+        console.log('Redirecionando para autenticação do Google...');
+        // Não fazemos nada aqui, pois haverá um redirecionamento
+        // O resultado será processado no useEffect quando o usuário retornar
       }
-      // Se tiver peladaId, o useEffect vai cuidar de processar o convite
     } catch (err: unknown) {
       console.error('Erro no login com Google:', err);
       
@@ -193,10 +232,11 @@ export default function Login() {
       if (googleError.code === 'auth/cancelled-popup-request' || 
           googleError.code === 'auth/popup-closed-by-user') {
         setError('Login cancelado. Tente novamente.');
+      } else if (googleError.code === 'auth/unauthorized-domain') {
+        setError('Este domínio não está autorizado para login com Google. Entre em contato com o suporte.');
       } else {
         setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
       }
-    } finally {
       setLoading(false);
     }
   };
