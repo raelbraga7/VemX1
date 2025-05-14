@@ -4,7 +4,7 @@ import WelcomeHeader from '@/components/WelcomeHeader';
 import RecentMatches from '@/components/RecentMatches';
 import { useUser } from '@/contexts/UserContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import CriarPeladaModal from '@/components/CriarPeladaModal';
 import PeladaConfigModal from '@/components/PeladaConfigModal';
 import RankingTable from '@/components/RankingTable';
@@ -164,147 +164,60 @@ export default function Dashboard() {
 
   // Verificar assinatura do usuário separadamente
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user) return;
     
-    console.log(`[Dashboard] Configurando listener da assinatura para usuário: ${user.uid}`);
+    // Limpar estado anterior para prevenir exibição incorreta enquanto carrega
+    setTemAssinaturaAtiva(false);
     
-    // Configurar um listener para o documento do usuário no Firestore
-    const userRef = doc(db, 'usuarios', user.uid);
-    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const userData = docSnapshot.data();
-        const statusAssinatura = userData?.statusAssinatura;
-        const isAtiva = statusAssinatura === 'ativa' || statusAssinatura === 'teste';
-        
-        console.log(`[Dashboard] Atualização em tempo real - Status da assinatura: ${statusAssinatura}`);
-        
-        setTemAssinaturaAtiva(isAtiva);
-        setVerificandoAssinatura(false);
-        
-        // Se o status acabou de mudar para ativo, mostrar toast de confirmação
-        if (isAtiva && !temAssinaturaAtiva) {
-          const planoNome = userData?.plano === 'premium' ? 'Premium' : 'Básico';
-          toast.success(`Sua assinatura do plano ${planoNome} está ativa!`);
-        }
-      } else {
-        console.log(`[Dashboard] Documento do usuário não encontrado no listener`);
-        setTemAssinaturaAtiva(false);
-        setVerificandoAssinatura(false);
-      }
-    }, (error) => {
-      console.error('[Dashboard] Erro no listener de assinatura:', error);
-      setVerificandoAssinatura(false);
-    });
-    
-    // Registrar o listener para limpeza posterior
-    registerListener(unsubscribe);
-    
-    // Verificação inicial em caso de problemas com o listener
-    const verificarAssinaturaInicial = async () => {
+    // Função para verificar assinatura
+    const verificarAssinaturaDoUsuario = async () => {
       try {
-        console.log(`[Dashboard] Verificação inicial do status da assinatura`);
+        console.log(`[Dashboard] Verificando assinatura para o usuário ${user.uid}`);
         setVerificandoAssinatura(true);
         const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-        console.log(`[Dashboard] Status inicial da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
+        console.log(`[Dashboard] Status da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
         setTemAssinaturaAtiva(assinaturaAtiva);
       } catch (error) {
-        console.error('[Dashboard] Erro ao verificar assinatura inicial:', error);
+        console.error('[Dashboard] Erro ao verificar assinatura:', error);
+        setTemAssinaturaAtiva(false);
       } finally {
         setVerificandoAssinatura(false);
       }
     };
+
+    // Configurar listener para atualizações em tempo real da assinatura
+    const userRef = doc(db, 'usuarios', user.uid);
+    const unsubscribe = onSnapshot(userRef, async (doc) => {
+      try {
+        if (doc.exists()) {
+          const userData = doc.data();
+          const statusAssinatura = userData?.statusAssinatura;
+          console.log(`[Dashboard] Status da assinatura atualizado: ${statusAssinatura}`);
+          
+          // Atualiza o estado com base nos dados do Firestore
+          setTemAssinaturaAtiva(
+            statusAssinatura === 'ativa' || statusAssinatura === 'teste'
+          );
+        } else {
+          // Se o documento não existir, define como falso
+          console.log(`[Dashboard] Documento do usuário não encontrado`);
+          setTemAssinaturaAtiva(false);
+        }
+      } catch (error) {
+        console.error('[Dashboard] Erro ao processar atualização da assinatura:', error);
+        setTemAssinaturaAtiva(false);
+      }
+    }, (error) => {
+      console.error('[Dashboard] Erro no listener de assinatura:', error);
+    });
     
-    verificarAssinaturaInicial();
+    registerListener(unsubscribe);
+    
+    // Verificação inicial em caso de problemas com o listener
+    verificarAssinaturaDoUsuario();
     
     // Cleanup: o listener será limpo pela função clearAllListeners() no useEffect de limpeza global
     
-  }, [user]);
-
-  // Efeito para verificar a assinatura sempre que o componente fica visível
-  useEffect(() => {
-    // Esta função será chamada quando a página ficar visível (quando o usuário voltar para ela)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user?.uid) {
-        console.log('[Dashboard] Página ficou visível - verificando assinatura novamente');
-        const verificarAssinaturaNovamente = async () => {
-          try {
-            setVerificandoAssinatura(true);
-            const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-            console.log(`[Dashboard] Status atualizado da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-            setTemAssinaturaAtiva(assinaturaAtiva);
-          } catch (error) {
-            console.error('[Dashboard] Erro ao verificar assinatura:', error);
-          } finally {
-            setVerificandoAssinatura(false);
-          }
-        };
-        verificarAssinaturaNovamente();
-      }
-    };
-
-    // Adicionar o listener para o evento de visibilidade
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Quando o componente é montado, verificar imediatamente (útil para navegação entre páginas)
-    if (user?.uid) {
-      console.log('[Dashboard] Re-montagem/navegação detectada - verificando assinatura');
-      const verificarAssinaturaNovamente = async () => {
-        try {
-          setVerificandoAssinatura(true);
-          const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-          console.log(`[Dashboard] Status atualizado da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-          setTemAssinaturaAtiva(assinaturaAtiva);
-        } catch (error) {
-          console.error('[Dashboard] Erro ao verificar assinatura:', error);
-        } finally {
-          setVerificandoAssinatura(false);
-        }
-      };
-      verificarAssinaturaNovamente();
-    }
-
-    // Limpar o listener quando o componente for desmontado
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user]);
-
-  // Efeito para verificar o localStorage quando o componente monta
-  useEffect(() => {
-    // Recuperar o estado da assinatura do localStorage (útil quando volta da página "time")
-    const recuperarEstadoAssinatura = () => {
-      if (typeof localStorage !== 'undefined' && user?.uid) {
-        const estadoSalvo = localStorage.getItem('assinaturaAtiva');
-        console.log(`[Dashboard] Estado da assinatura recuperado do localStorage: ${estadoSalvo}`);
-        
-        // Se não há estado salvo, verifica diretamente no Firestore
-        if (estadoSalvo === null) {
-          console.log('[Dashboard] Nenhum estado salvo, verificando direto no Firestore');
-          return;
-        }
-        
-        const assinaturaAtivaLocalStorage = estadoSalvo === 'true';
-        
-        // Se o estado salvo indica que o usuário não tem assinatura, garantimos que isso se reflita no estado
-        // Isso evita que a UI mostre incorretamente funcionalidades premium
-        if (!assinaturaAtivaLocalStorage) {
-          console.log('[Dashboard] Definindo assinatura como inativa com base no localStorage');
-          setTemAssinaturaAtiva(false);
-          
-          // Ainda assim, verificamos o status atual para atualizar caso tenha mudado
-          verificarAssinaturaAtiva(user.uid)
-            .then(assinaturaAtiva => {
-              console.log(`[Dashboard] Verificação de confirmação: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-              setTemAssinaturaAtiva(assinaturaAtiva);
-            })
-            .catch(error => {
-              console.error('[Dashboard] Erro ao verificar assinatura na inicialização:', error);
-            });
-        }
-      }
-    };
-    
-    recuperarEstadoAssinatura();
   }, [user]);
 
   useEffect(() => {
@@ -536,47 +449,6 @@ export default function Dashboard() {
     }
   };
 
-  // Função para forçar verificação completa do estado da assinatura
-  const forcarVerificacaoAssinatura = useCallback(async () => {
-    if (!user?.uid) return;
-    
-    console.log('[Dashboard] Forçando verificação completa da assinatura');
-    try {
-      setVerificandoAssinatura(true);
-      
-      // Primeiro define como false para garantir que a UI não mostre recursos premium incorretamente
-      setTemAssinaturaAtiva(false);
-      
-      // Então consulta o Firestore para obter o estado real
-      const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-      console.log(`[Dashboard] Status da assinatura após verificação forçada: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-      
-      // Atualiza com o valor real
-      setTemAssinaturaAtiva(assinaturaAtiva);
-      
-      // Salva no localStorage para referência futura
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('assinaturaAtiva', assinaturaAtiva ? 'true' : 'false');
-        console.log(`[Dashboard] Salvando estado verificado no localStorage: ${assinaturaAtiva}`);
-      }
-    } catch (error) {
-      console.error('[Dashboard] Erro na verificação forçada:', error);
-      // Em caso de erro, mantém como false para segurança
-      setTemAssinaturaAtiva(false);
-      
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('assinaturaAtiva', 'false');
-      }
-    } finally {
-      setVerificandoAssinatura(false);
-    }
-  }, [user]);
-
-  // Executar verificação forçada na montagem do componente
-  useEffect(() => {
-    forcarVerificacaoAssinatura();
-  }, [forcarVerificacaoAssinatura]);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -597,38 +469,11 @@ export default function Dashboard() {
         <div className="bg-white border-b border-gray-200 mb-6">
           <div className="container mx-auto">
             <div className="flex space-x-8 border-b">
-              <button 
-                onClick={() => {
-                  // Verificar status da assinatura ao clicar na navegação "PELADA"
-                  if (user?.uid) {
-                    console.log('[Dashboard] Navegação para Pelada - verificando assinatura');
-                    verificarAssinaturaAtiva(user.uid)
-                      .then(assinaturaAtiva => {
-                        console.log(`[Dashboard] Status na navegação: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-                        setTemAssinaturaAtiva(assinaturaAtiva);
-                      })
-                      .catch(error => {
-                        console.error('[Dashboard] Erro ao verificar assinatura na navegação:', error);
-                      });
-                  }
-                }}
-                className="relative py-4 px-6 font-medium text-sm text-blue-600"
-              >
+              <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
                 PELADA
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
               </button>
-              <Link 
-                href="/time" 
-                className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700"
-                onClick={() => {
-                  // Armazenar no localStorage que o usuário não tem assinatura (caso não tenha)
-                  // para que possa ser recuperado quando voltar
-                  if (typeof localStorage !== 'undefined') {
-                    localStorage.setItem('assinaturaAtiva', temAssinaturaAtiva ? 'true' : 'false');
-                    console.log(`[Dashboard] Salvando estado da assinatura ao navegar: ${temAssinaturaAtiva}`);
-                  }
-                }}
-              >
+              <Link href="/time" className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
                 TIME
               </Link>
             </div>

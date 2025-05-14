@@ -118,15 +118,57 @@ export default function TimeSelecionado() {
     if (!user?.uid) return;
     
     try {
+      console.log(`[TimeSelecionado] Verificando assinatura para o usuário ${user.uid}`);
       setVerificandoAssinatura(true);
       const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
+      console.log(`[TimeSelecionado] Status da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
       setTemAssinaturaAtiva(assinaturaAtiva);
     } catch (error) {
-      console.error('Erro ao verificar assinatura:', error);
+      console.error('[TimeSelecionado] Erro ao verificar assinatura:', error);
+      setTemAssinaturaAtiva(false);
     } finally {
       setVerificandoAssinatura(false);
     }
   };
+
+  // Efeito para verificar a assinatura independentemente da pelada
+  useEffect(() => {
+    if (!user) return;
+    
+    // Limpar estado anterior para prevenir exibição incorreta enquanto carrega
+    setTemAssinaturaAtiva(false);
+    
+    // Configurar listener para atualizações em tempo real da assinatura
+    const userRef = doc(db, 'usuarios', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
+      try {
+        if (docSnapshot.exists()) {
+          const userData = docSnapshot.data();
+          const statusAssinatura = userData?.statusAssinatura;
+          console.log(`[TimeSelecionado] Status da assinatura atualizado: ${statusAssinatura}`);
+          
+          // Atualiza o estado com base nos dados do Firestore
+          setTemAssinaturaAtiva(
+            statusAssinatura === 'ativa' || statusAssinatura === 'teste'
+          );
+        } else {
+          console.log(`[TimeSelecionado] Documento do usuário não encontrado`);
+          setTemAssinaturaAtiva(false);
+        }
+      } catch (error) {
+        console.error('[TimeSelecionado] Erro ao processar atualização da assinatura:', error);
+        setTemAssinaturaAtiva(false);
+      }
+    }, (error) => {
+      console.error('[TimeSelecionado] Erro no listener de assinatura:', error);
+    });
+    
+    // Verificação inicial
+    verificarAssinatura();
+    
+    // Cleanup
+    return () => unsubscribe();
+  }, [user]);
 
   // Carregar a pelada do usuário e verificar se ele é o dono
   useEffect(() => {
@@ -156,11 +198,6 @@ export default function TimeSelecionado() {
           setPeladaCodigo(peladaDocData.codigo || '');
           const isUserOwner = peladaDocData.ownerId === user.uid;
           setIsOwner(isUserOwner);
-
-          // Verificar assinatura somente se for o dono da pelada
-          if (isUserOwner) {
-            await verificarAssinatura();
-          }
 
           // Agora que temos o ID da pelada, podemos buscar os times
           buscarTimes(peladaDoc.id);
@@ -566,24 +603,17 @@ export default function TimeSelecionado() {
           <h2 className="text-2xl font-semibold py-6">Time Selecionado</h2>
           
           <div className="flex space-x-8 border-b">
-            <Link 
-              href={peladaId ? `/pelada/${peladaId}` : "/dashboard"}
-              className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700"
-              onClick={() => {
-                // Armazenar no localStorage que o usuário não tem assinatura (caso não tenha)
-                // isso garante a persistência ao voltar para a tela de pelada
-                if (typeof localStorage !== 'undefined') {
-                  localStorage.setItem('assinaturaAtiva', temAssinaturaAtiva ? 'true' : 'false');
-                  console.log(`[TimePage] Salvando estado da assinatura ao navegar: ${temAssinaturaAtiva}`);
-                }
-              }}
-            >
-              PELADA
+            <Link href={peladaId ? `/pelada/${peladaId}` : "/dashboard"}>
+              <button className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
+                PELADA
+              </button>
             </Link>
-            <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
-              TIME
-              <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
-            </button>
+            <Link href="/time">
+              <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
+                TIME
+                <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
+              </button>
+            </Link>
           </div>
         </div>
       </div>
