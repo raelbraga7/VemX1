@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, getRedirectResult, signInWithRedirect, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/firebase/config';
 import { useInvite } from '@/hooks/useInvite';
 import { useUser } from '@/contexts/UserContext';
 import Link from 'next/link';
+import { signInWithGoogle, getGoogleRedirectResult } from '@/firebase/auth';
 import { getUser } from '@/firebase/userService';
 
 // Contador improvisado para evitar bloqueio por muitas tentativas
@@ -25,8 +26,8 @@ export default function Login() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const peladaId = searchParams?.get('peladaId') || null;
-  const cadastroSucesso = searchParams?.get('cadastroSucesso') || null;
   const convidadoPor = searchParams?.get('convidadoPor') || null;
+  const cadastroSucesso = searchParams?.get('cadastroSucesso') || null;
   const { acceptInvite } = useInvite();
   const { user, loading: userLoading } = useUser();
   
@@ -137,38 +138,31 @@ export default function Login() {
         if (!user && !userLoading) {
           console.log('Verificando se há resultado de redirecionamento do Google...');
           setLoading(true);
-          const result = await getRedirectResult(auth);
-          const googleUser = result?.user;
+          const googleUser = await getGoogleRedirectResult();
           
           if (googleUser) {
             console.log('Login com Google por redirecionamento bem-sucedido:', googleUser.uid);
             
-            try {
-              // Verificar se o usuário existe no Firestore
-              const userDoc = await getUser(googleUser.uid);
+            // Verificar se o usuário existe no Firestore
+            const userDoc = await getUser(googleUser.uid);
+            if (!userDoc) {
+              console.log('Usuário autenticado, mas não existe no Firestore. Redirecionando para cadastro:', googleUser.uid);
               
-              if (!userDoc) {
-                console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
-                
-                // Fazer logout
-                await auth.signOut();
-                
-                // Mostrar mensagem de erro em vez de redirecionar
-                setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
-                return;
+              // Redirecionar para página de cadastro
+              if (peladaId) {
+                router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+              } else {
+                router.push('/cadastro');
               }
-              
-              // Se não tiver peladaId, redireciona para o dashboard
-              if (!peladaId) {
-                redirecionandoRef.current = true;
-                router.push('/dashboard');
-              }
-              // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
-            } catch (verificaErro) {
-              console.error('Erro ao verificar usuário no Firestore:', verificaErro);
-              await auth.signOut();
-              setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+              return;
             }
+            
+            // Se não tiver peladaId, redireciona para o dashboard
+            if (!peladaId) {
+              redirecionandoRef.current = true;
+              router.push('/dashboard');
+            }
+            // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
           }
         }
       } catch (err) {
@@ -299,94 +293,53 @@ export default function Login() {
     setError('');
     
     try {
-      // Implementação mais robusta para evitar a criação automática de usuários
-      const provider = new GoogleAuthProvider();
-      
-      // Forçar seleção de conta e não permitir criação automática
-      provider.setCustomParameters({
-        prompt: 'select_account',
-        // Parâmetro especial para não criar usuário automaticamente
-        'login_hint': 'existing-users-only'
-      });
-      
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      let googleUser;
-      
-      try {
-        if (isMobile) {
-          // Em dispositivos móveis, usar redirecionamento
-          await signInWithRedirect(auth, provider);
-          return; // Será tratado pelo useEffect de redirecionamento
-        } else {
-          // Em desktop, usar popup
-          const result = await signInWithPopup(auth, provider);
-          googleUser = result.user;
-        }
+      const googleUser = await signInWithGoogle();
+      // Em caso de redirecionamento, googleUser será null
+      // O resultado será processado no useEffect ao retornar
+      if (googleUser) {
+        console.log('Login com Google realizado com sucesso via popup:', googleUser.uid);
         
-        // Se chegou aqui, autenticou com sucesso, verificar se existe no Firestore
-        if (googleUser) {
-          console.log('Usuário autenticado com Google, verificando no Firestore:', googleUser.uid);
+        // Verificar se o usuário existe no Firestore
+        const userDoc = await getUser(googleUser.uid);
+        if (!userDoc) {
+          console.log('Usuário autenticado, mas não existe no Firestore. Redirecionando para cadastro:', googleUser.uid);
           
-          // Verificar no Firestore
-          const userDoc = await getUser(googleUser.uid);
-          
-          if (!userDoc) {
-            console.log('Usuário não encontrado no Firestore, fazendo logout:', googleUser.uid);
-            // Fazer logout se não existir
-            await auth.signOut();
-            setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
-            return;
+          // Redirecionar para página de cadastro
+          if (peladaId) {
+            router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+          } else {
+            router.push('/cadastro');
           }
-          
-          console.log('Usuário encontrado no Firestore:', googleUser.uid);
-          // Resetar tentativas após sucesso
-          tentativasDeLogin = 0;
-          
-          // Redirecionar para o destino apropriado
-          if (!peladaId) {
-            router.push('/dashboard');
-          }
-          // Se tiver peladaId, o useEffect vai processar o convite
-        }
-      } catch (authError: unknown) {
-        const error = authError as { code?: string; message?: string };
-        console.error('Erro específico na autenticação Google:', error?.code, authError);
-        
-        if (error?.code === 'auth/account-exists-with-different-credential' ||
-            error?.code === 'auth/user-not-found' ||
-            error?.code === 'auth/invalid-credential') {
-          setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
           return;
         }
         
-        if (error?.code === 'auth/popup-closed-by-user' || 
-            error?.code === 'auth/cancelled-popup-request') {
-          setError('Login cancelado. Tente novamente.');
-          return;
-        }
+        // Resetar tentativas após sucesso
+        tentativasDeLogin = 0;
         
-        if (error?.code === 'auth/unauthorized-domain') {
-          setError('Este domínio não está autorizado para login com Google. Entre em contato com o suporte.');
-          return;
+        // Se não tiver peladaId, redireciona para o dashboard
+        if (!peladaId) {
+          router.push('/dashboard');
         }
-        
-        // Verificar se o usuário foi autenticado mas podemos tratá-lo
-        if (auth.currentUser) {
-          console.log('Usuário autenticado com problemas, fazendo logout');
-          await auth.signOut();
-        }
-        
-        setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
+        // Se tiver peladaId, o useEffect vai cuidar de processar o convite
+      } else {
+        console.log('Redirecionando para autenticação do Google...');
+        // Não fazemos nada aqui, pois haverá um redirecionamento
+        // O resultado será processado no useEffect quando o usuário retornar
       }
     } catch (err: unknown) {
-      console.error('Erro geral no login com Google:', err);
+      console.error('Erro no login com Google:', err);
       
-      // Sempre garantir que não tenha um usuário logado em caso de erro
-      if (auth.currentUser) {
-        await auth.signOut();
+      const googleError = err as { code?: string, message: string };
+      
+      // O usuário cancelou o login
+      if (googleError.code === 'auth/cancelled-popup-request' || 
+          googleError.code === 'auth/popup-closed-by-user') {
+        setError('Login cancelado. Tente novamente.');
+      } else if (googleError.code === 'auth/unauthorized-domain') {
+        setError('Este domínio não está autorizado para login com Google. Entre em contato com o suporte.');
+      } else {
+        setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
       }
-      
-      setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
     } finally {
       setLoading(false);
     }
