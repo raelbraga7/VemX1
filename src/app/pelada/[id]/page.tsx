@@ -12,9 +12,6 @@ import { LogoutButton } from '@/components/LogoutButton';
 import Link from 'next/link';
 import InviteButton from '@/components/InviteButton';
 import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
-import { Dialog } from '@headlessui/react';
-import { PLANOS } from '@/lib/planos';
-import { toast } from 'react-toastify';
 
 interface Time {
   nome: string;
@@ -36,8 +33,6 @@ export default function PaginaPelada() {
   const [isOwner, setIsOwner] = useState(false);
   const [temAssinaturaAtiva, setTemAssinaturaAtiva] = useState(false);
   const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
-  const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
-  const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
   const [bannerFechado, setBannerFechado] = useState(false);
 
   useEffect(() => {
@@ -52,48 +47,6 @@ export default function PaginaPelada() {
     localStorage.setItem('bannerFechado', 'true');
     setBannerFechado(true);
   };
-
-  const handleCTA = async (plano: string) => {
-    try {
-      setLoadingPlano(plano);
-      
-      // URL de pagamento da Hotmart
-      const HOTMART_URLS = {
-        premium: 'https://pay.hotmart.com/M99700196W?off=r5di19vt'
-      };
-      
-      if (!HOTMART_URLS[plano as keyof typeof HOTMART_URLS]) {
-        toast.error('Plano não disponível no momento');
-        return;
-      }
-      
-      // Redireciona para a página de pagamento
-      window.open(HOTMART_URLS[plano as keyof typeof HOTMART_URLS], '_blank');
-    } catch (error) {
-      console.error('Erro ao processar pagamento:', error);
-      toast.error('Erro ao processar pagamento. Tente novamente.');
-    } finally {
-      setLoadingPlano(null);
-    }
-  };
-
-  useEffect(() => {
-    const verificarAssinatura = async () => {
-      if (!user?.uid) return;
-      
-      try {
-        setVerificandoAssinatura(true);
-        const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-        setTemAssinaturaAtiva(assinaturaAtiva);
-      } catch (error) {
-        console.error('Erro ao verificar assinatura:', error);
-      } finally {
-        setVerificandoAssinatura(false);
-      }
-    };
-    
-    verificarAssinatura();
-  }, [user]);
 
   useEffect(() => {
     const init = async () => {
@@ -119,6 +72,12 @@ export default function PaginaPelada() {
           currentUserId: user?.uid,
           isDono: isDono
         });
+        
+        // Verificar assinatura somente se for o dono da pelada
+        if (isDono) {
+          await verificarAssinatura(user?.uid);
+        }
+        
         setLoading(false);
       } catch (err) {
         console.error('Erro ao inicializar página:', err);
@@ -129,6 +88,20 @@ export default function PaginaPelada() {
 
     init();
   }, [params?.id, searchParams, user?.uid]);
+
+  // Adicionando função para verificar assinatura
+  const verificarAssinatura = async (userId: string | undefined) => {
+    if (!userId) return;
+    
+    try {
+      const assinaturaAtiva = await verificarAssinaturaAtiva(userId);
+      setTemAssinaturaAtiva(assinaturaAtiva);
+    } catch (error) {
+      console.error('Erro ao verificar assinatura:', error);
+    } finally {
+      setVerificandoAssinatura(false);
+    }
+  };
 
   const handleConfigSaved = async (peladaId: string) => {
     setShowConfigModal(false);
@@ -274,72 +247,8 @@ export default function PaginaPelada() {
           />
         )}
 
-        {/* Modal de Planos */}
-        <Dialog open={isPlanosModalOpen} onClose={() => setIsPlanosModalOpen(false)} className="relative z-50">
-          <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
-          
-          <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
-            <Dialog.Panel className="w-full max-w-md mx-auto bg-black text-white rounded-2xl shadow-xl overflow-hidden">
-              <div className="p-4 sm:p-6 text-center">
-                <Dialog.Title className="text-xl sm:text-2xl font-bold mb-4">
-                  Assine o VemX1
-                </Dialog.Title>
-                
-                <div className="mx-auto">
-                  {/* Plano Premium */}
-                  <div className="bg-black/40 rounded-xl p-4 sm:p-6 border-2 border-[#1d4ed8] relative">
-                    <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-1 text-sm rounded-t-xl font-bold">
-                      Plano VemX1
-                    </div>
-                    <div className="text-xl font-bold mb-2 mt-6">Plano Premium</div>
-                    <div className="text-3xl font-bold mb-4">
-                      R${PLANOS.PREMIUM.preco}
-                      <span className="text-sm text-gray-400">/mês</span>
-                    </div>
-                    <ul className="text-left text-sm space-y-2 mb-4">
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Jogadores ILIMITADOS
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Peladas ILIMITADAS
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Estatísticas avançadas
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Suporte prioritário
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Cancele quando quiser
-                      </li>
-                    </ul>
-                    <button 
-                      onClick={() => handleCTA('premium')}
-                      disabled={loadingPlano === 'premium'}
-                      className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-4 py-3 w-full rounded-lg text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
-                    >
-                      {loadingPlano === 'premium' ? 'Processando...' : 'Assinar Agora'}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setIsPlanosModalOpen(false)}
-                  className="mt-6 px-4 py-1 text-sm text-gray-300 hover:text-white"
-                >
-                  Fechar
-                </button>
-              </div>
-            </Dialog.Panel>
-          </div>
-        </Dialog>
-
-        {!temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && (
+        {/* Banner de Acesso Limitado - Exibe apenas para o dono da pelada */}
+        {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && (
           <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
             <div className="flex justify-between items-start mb-2">
               <h3 className="font-bold">Acesso Limitado</h3>
@@ -355,7 +264,7 @@ export default function PaginaPelada() {
             </div>
             <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
             <button 
-              onClick={() => setIsPlanosModalOpen(true)}
+              onClick={() => window.location.href = '/dashboard'}
               className="w-full bg-white text-blue-600 py-2 px-4 rounded hover:bg-blue-100 transition-colors font-medium"
             >
               Ver Planos

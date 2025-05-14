@@ -114,23 +114,19 @@ export default function TimeSelecionado() {
   );
 
   // Verificar assinatura do usuário
-  useEffect(() => {
-    const verificarAssinatura = async () => {
-      if (!user?.uid) return;
-      
-      try {
-        setVerificandoAssinatura(true);
-        const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
-        setTemAssinaturaAtiva(assinaturaAtiva);
-      } catch (error) {
-        console.error('Erro ao verificar assinatura:', error);
-      } finally {
-        setVerificandoAssinatura(false);
-      }
-    };
+  const verificarAssinatura = async () => {
+    if (!user?.uid) return;
     
-    verificarAssinatura();
-  }, [user]);
+    try {
+      setVerificandoAssinatura(true);
+      const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
+      setTemAssinaturaAtiva(assinaturaAtiva);
+    } catch (error) {
+      console.error('Erro ao verificar assinatura:', error);
+    } finally {
+      setVerificandoAssinatura(false);
+    }
+  };
 
   // Carregar a pelada do usuário e verificar se ele é o dono
   useEffect(() => {
@@ -158,7 +154,13 @@ export default function TimeSelecionado() {
           // Manter para compatibilidade com o código existente
           setPeladaId(peladaDoc.id);
           setPeladaCodigo(peladaDocData.codigo || '');
-          setIsOwner(peladaDocData.ownerId === user.uid);
+          const isUserOwner = peladaDocData.ownerId === user.uid;
+          setIsOwner(isUserOwner);
+
+          // Verificar assinatura somente se for o dono da pelada
+          if (isUserOwner) {
+            await verificarAssinatura();
+          }
 
           // Agora que temos o ID da pelada, podemos buscar os times
           buscarTimes(peladaDoc.id);
@@ -739,7 +741,8 @@ export default function TimeSelecionado() {
         </div>
       </div>
       
-      {!temAssinaturaAtiva && !verificandoAssinatura && (
+      {/* Banner de Acesso Limitado - Apenas para donos da pelada */}
+      {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && (
         <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
           <h3 className="font-bold mb-2">Acesso Limitado</h3>
           <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
