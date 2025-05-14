@@ -10,7 +10,7 @@ import { subscribeToNotifications } from '@/firebase/notificationService';
 import { Notification } from '@/types/notification';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
-import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, getDocs, deleteDoc, where } from 'firebase/firestore';
+import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, getDocs, deleteDoc, where, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-hot-toast';
 import { usePathname } from 'next/navigation';
@@ -31,14 +31,56 @@ function Header() {
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
   const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const [isOwner, setIsOwner] = useState(false);
   const pathname = usePathname();
-  
-  // Verificar se estamos em uma página de pelada específica
-  const isPeladaSpecificPage = pathname?.startsWith('/pelada/') && pathname.split('/').length > 2;
-  
-  // Por padrão, mostrar o botão (será controlado pelo componente com base no isOwner)
-  const showAssinaturaButton = !isPeladaSpecificPage;
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Verificar se o usuário é dono da pelada, baseado no path
+  useEffect(() => {
+    if (!user || !pathname) return;
+    
+    const checkIsOwner = async () => {
+      try {
+        // Verifica se estamos em uma página de pelada
+        const peladaMatch = pathname.match(/\/pelada\/([^\/]+)/);
+        if (peladaMatch && peladaMatch[1]) {
+          const peladaId = peladaMatch[1];
+          
+          // Busca a pelada pelo ID
+          const peladaRef = doc(db, 'peladas', peladaId);
+          const peladaSnap = await getDoc(peladaRef);
+          
+          if (peladaSnap.exists()) {
+            const peladaData = peladaSnap.data();
+            setIsOwner(peladaData.ownerId === user.uid);
+          } else {
+            setIsOwner(false);
+          }
+        } else if (pathname === '/dashboard' || pathname === '/time') {
+          // Nas páginas de dashboard e time, verificamos a pelada mais recente
+          const peladasRef = collection(db, 'peladas');
+          const q = query(peladasRef, where('players', 'array-contains', user.uid));
+          const snapshot = await getDocs(q);
+          
+          if (!snapshot.empty) {
+            const peladaDoc = snapshot.docs[0];
+            const peladaData = peladaDoc.data();
+            setIsOwner(peladaData.ownerId === user.uid);
+          } else {
+            setIsOwner(false);
+          }
+        } else {
+          // Em outras páginas, permitimos a visualização do botão
+          setIsOwner(true);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar permissões da pelada:', error);
+        setIsOwner(false);
+      }
+    };
+    
+    checkIsOwner();
+  }, [user, pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -170,7 +212,7 @@ function Header() {
         
         {user && (
           <div className="flex items-center space-x-2">
-            {showAssinaturaButton && <AssinaturaButton />}
+            <AssinaturaButton isOwner={isOwner} />
             <NotificationBell 
               count={unreadCount} 
               onClick={() => setIsNotificationsPanelOpen(true)} 

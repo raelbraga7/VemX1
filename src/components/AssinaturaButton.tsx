@@ -44,7 +44,7 @@ export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
     }
   };
   
-  // Se não for o dono, não renderiza o botão
+  // Se não for o dono da pelada, não exibe o botão
   if (!isOwner) {
     return null;
   }
