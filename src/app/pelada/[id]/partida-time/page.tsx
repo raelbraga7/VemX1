@@ -94,9 +94,6 @@ export default function PartidaTime() {
   const [rodando, setRodando] = useState(false);
   const [tempoAcabou, setTempoAcabou] = useState(false);
   const [openModal, setOpenModal] = useState(false);
-  const [openModalSelecaoTimes, setOpenModalSelecaoTimes] = useState(false);
-  const [timesSalvos, setTimesSalvos] = useState<TimeOriginal[]>([]);
-  const [timesSelecionados, setTimesSelecionados] = useState<{id: string, selecionado: boolean}[]>([]);
   
   // Referência para a função de finalizar partida
   const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
@@ -362,6 +359,12 @@ export default function PartidaTime() {
               const jogadorId = jogador.id || jogador.uid || '';
               if (!jogadorId) return;
               
+              // Obter o valor exato de gols
+              const golsNum = Number(jogador.gols) || 0;
+              const assistenciasNum = Number(jogador.assistencias) || 0;
+              
+              console.log(`[DEBUG] Jogador ${jogador.nome} do Time A marcou ${golsNum} gols nesta partida`);
+              
               // Buscar estatísticas existentes do jogador neste time
               const estatisticasTime = peladaData.estatisticasTime || {};
               const estatisticasDoTime = estatisticasTime[timeAId] || {};
@@ -375,19 +378,25 @@ export default function PartidaTime() {
                 empates: 0
               };
               
+              console.log(`[DEBUG] Estatísticas atuais de ${jogador.nome} no Time A: ${jogadorStats.gols} gols`);
+              
               // Calcular pontos com base na nova tabela:
               // Gol: +2, Assistência: +1, Vitória: +7, Derrota: -6, Empate: +1, Participação: +0.5
-              const pontosPorGols = (jogador.gols || 0) * 2;
-              const pontosPorAssistencias = (jogador.assistencias || 0) * 1;
+              const pontosPorGols = golsNum * 2; // Pontuação, não quantidade
+              const pontosPorAssistencias = assistenciasNum * 1;
               const pontosPorResultado = timeAVenceu ? 7 : (timeBVenceu ? -6 : 1); // Vitória, derrota ou empate
               const pontosPorParticipacao = 0.5; // Apenas por participar da partida
               
               const pontosDaPartida = pontosPorGols + pontosPorAssistencias + pontosPorResultado + pontosPorParticipacao;
               
+              // Quantidade exata de gols dessa partida
+              const golsAtualizados = (jogadorStats.gols || 0) + golsNum;
+              console.log(`[DEBUG] Atualizando gols para ${jogador.nome} no Time A: ${jogadorStats.gols} + ${golsNum} = ${golsAtualizados}`);
+              
               // Atualizar estatísticas do jogador
               const novasEstatisticas: JogadorEstatistica = {
-                gols: (jogadorStats.gols || 0) + (jogador.gols || 0),
-                assistencias: (jogadorStats.assistencias || 0) + (jogador.assistencias || 0),
+                gols: golsAtualizados,
+                assistencias: (jogadorStats.assistencias || 0) + assistenciasNum,
                 vitorias: (jogadorStats.vitorias || 0) + (timeAVenceu ? 1 : 0),
                 derrotas: (jogadorStats.derrotas || 0) + (timeBVenceu ? 1 : 0),
                 pontos: (jogadorStats.pontos || 0) + pontosDaPartida,
@@ -404,6 +413,12 @@ export default function PartidaTime() {
               const jogadorId = jogador.id || jogador.uid || '';
               if (!jogadorId) return;
               
+              // Obter o valor exato de gols
+              const golsNum = Number(jogador.gols) || 0;
+              const assistenciasNum = Number(jogador.assistencias) || 0;
+              
+              console.log(`[DEBUG] Jogador ${jogador.nome} do Time B marcou ${golsNum} gols nesta partida`);
+              
               // Buscar estatísticas existentes do jogador neste time
               const estatisticasTime = peladaData.estatisticasTime || {};
               const estatisticasDoTime = estatisticasTime[timeBId] || {};
@@ -417,19 +432,25 @@ export default function PartidaTime() {
                 empates: 0
               };
               
+              console.log(`[DEBUG] Estatísticas atuais de ${jogador.nome} no Time B: ${jogadorStats.gols} gols`);
+              
               // Calcular pontos com base na nova tabela:
               // Gol: +2, Assistência: +1, Vitória: +7, Derrota: -6, Empate: +1, Participação: +0.5
-              const pontosPorGols = (jogador.gols || 0) * 2;
-              const pontosPorAssistencias = (jogador.assistencias || 0) * 1;
+              const pontosPorGols = golsNum * 2; // Pontuação, não quantidade
+              const pontosPorAssistencias = assistenciasNum * 1;
               const pontosPorResultado = timeBVenceu ? 7 : (timeAVenceu ? -6 : 1); // Vitória, derrota ou empate
               const pontosPorParticipacao = 0.5; // Apenas por participar da partida
               
               const pontosDaPartida = pontosPorGols + pontosPorAssistencias + pontosPorResultado + pontosPorParticipacao;
               
+              // Quantidade exata de gols dessa partida
+              const golsAtualizados = (jogadorStats.gols || 0) + golsNum;
+              console.log(`[DEBUG] Atualizando gols para ${jogador.nome} no Time B: ${jogadorStats.gols} + ${golsNum} = ${golsAtualizados}`);
+              
               // Atualizar estatísticas do jogador
               const novasEstatisticas: JogadorEstatistica = {
-                gols: (jogadorStats.gols || 0) + (jogador.gols || 0),
-                assistencias: (jogadorStats.assistencias || 0) + (jogador.assistencias || 0),
+                gols: golsAtualizados,
+                assistencias: (jogadorStats.assistencias || 0) + assistenciasNum,
                 vitorias: (jogadorStats.vitorias || 0) + (timeBVenceu ? 1 : 0),
                 derrotas: (jogadorStats.derrotas || 0) + (timeAVenceu ? 1 : 0),
                 pontos: (jogadorStats.pontos || 0) + pontosDaPartida,
@@ -573,7 +594,6 @@ export default function PartidaTime() {
       intervalId = setInterval(() => {
         // Contagem regressiva
         if (minutos === 0 && segundos === 0) {
-          console.log('Tempo esgotado, finalizando partida');
           setRodando(false);
           setTempoAcabou(true);
           
@@ -588,7 +608,15 @@ export default function PartidaTime() {
             toast('Tempo esgotado!');
           }
           
-          // Não finaliza automaticamente, deixa o usuário clicar no botão
+          // Finalize a partida automaticamente
+          finalizarPartidaRef.current().then(success => {
+            if (success) {
+              // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
+            } else {
+              // Falha ao finalizar automaticamente
+              toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
+            }
+          });
           
           return;
         }
@@ -606,98 +634,6 @@ export default function PartidaTime() {
       clearInterval(intervalId);
     };
   }, [rodando, minutos, segundos, determinarVencedor]);
-
-  // Carrega todos os times disponíveis
-  const carregarTimesSalvos = useCallback(async () => {
-    if (!params?.id || typeof params.id !== 'string') return;
-    
-    try {
-      const peladaRef = doc(db, 'peladas', params.id);
-      const peladaDoc = await getDoc(peladaRef);
-      
-      if (peladaDoc.exists()) {
-        // Buscar times desta pelada
-        const timesQuery = await getDoc(doc(db, 'times', peladaDoc.id));
-        if (timesQuery.exists()) {
-          const times = timesQuery.data() as TimeOriginal[];
-          setTimesSalvos(times);
-          setTimesSelecionados(times.map(time => ({
-            id: time.id,
-            selecionado: false
-          })));
-        } else {
-          console.log('Nenhum time encontrado para esta pelada');
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao carregar times:', error);
-    }
-  }, [params?.id]);
-
-  // Modificar o botão de finalizar partida para abrir o modal
-  const handleFinalizarESelecionar = async () => {
-    try {
-      const rankingAtualizado = await handleFinalizarPartida();
-      if (rankingAtualizado) {
-        toast.success('Partida finalizada e ranking atualizado!');
-        // Carrega times para o modal
-        await carregarTimesSalvos();
-        // Abre o modal de seleção de times
-        setOpenModalSelecaoTimes(true);
-      } else {
-        toast.error('Erro ao finalizar a partida');
-      }
-    } catch (error) {
-      console.error('Erro ao finalizar partida:', error);
-      toast.error('Ocorreu um erro ao finalizar a partida');
-    }
-  };
-
-  // Adicionar função para selecionar times
-  const handleSelecionarTime = (timeId: string) => {
-    setTimesSelecionados(prev => {
-      const selecionados = prev.filter(t => t.selecionado);
-      
-      // Se já tem dois times selecionados e este não está selecionado, impede a seleção
-      if (selecionados.length >= 2 && !prev.find(t => t.id === timeId)?.selecionado) {
-        toast.error('Você já selecionou dois times');
-        return prev;
-      }
-      
-      return prev.map(time => 
-        time.id === timeId 
-          ? { ...time, selecionado: !time.selecionado } 
-          : time
-      );
-    });
-  };
-
-  // Adicionar função para iniciar próxima partida
-  const iniciarProximaPartida = () => {
-    const timesSelecionadosArray = timesSelecionados.filter(t => t.selecionado);
-    
-    if (timesSelecionadosArray.length !== 2) {
-      toast.error('Selecione exatamente 2 times');
-      return;
-    }
-    
-    // Salvamos no localStorage para a página de partida-time poder ler
-    localStorage.setItem(`timesSelecionados_${params?.id}`, JSON.stringify(
-      timesSelecionadosArray.map(t => {
-        const time = timesSalvos.find(ts => ts.id === t.id);
-        return {
-          id: t.id,
-          name: time?.name || 'Time sem nome'
-        };
-      })
-    ));
-    
-    // Fechamos o modal
-    setOpenModalSelecaoTimes(false);
-    
-    // Redirecionamos para uma nova partida
-    router.push(`/pelada/${params?.id}/partida-time`);
-  };
 
   if (loading) {
     return (
@@ -890,54 +826,18 @@ export default function PartidaTime() {
           </div>
         </div>
         
-        {/* Aqui adicionamos o modal */}
-        <Dialog
-          open={openModalSelecaoTimes}
-          onClose={() => setOpenModalSelecaoTimes(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Selecione os times para a próxima partida</DialogTitle>
-          <DialogContent>
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {timesSalvos.map((time) => (
-                <div 
-                  key={time.id}
-                  className={`border p-4 rounded-lg cursor-pointer ${
-                    timesSelecionados.find(t => t.id === time.id)?.selecionado 
-                      ? 'border-2 border-blue-500 bg-blue-50' 
-                      : 'border-gray-300'
-                  }`}
-                  onClick={() => handleSelecionarTime(time.id)}
-                >
-                  <h3 className="font-bold text-lg">{time.name}</h3>
-                  <p className="text-sm text-gray-600">
-                    {time.jogadores.length} jogadores
-                  </p>
-                </div>
-              ))}
-            </div>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenModalSelecaoTimes(false)}>Cancelar</Button>
-            <Button 
-              onClick={iniciarProximaPartida}
-              variant="contained" 
-              color="primary"
-              disabled={timesSelecionados.filter(t => t.selecionado).length !== 2}
-            >
-              Iniciar Próxima Partida
-            </Button>
-          </DialogActions>
-        </Dialog>
-        
         {/* Botão Finalizar Partida */}
         <div className="fixed bottom-6 right-6">
           {tempoAcabou ? (
             <Fab 
               variant="extended" 
               color="secondary" 
-              onClick={handleFinalizarESelecionar}
+              onClick={async () => {
+                const rankingAtualizado = await handleFinalizarPartida();
+                if (rankingAtualizado) {
+                  toast.success('Partida finalizada e ranking atualizado!');
+                }
+              }}
               sx={{ px: 3 }}
             >
               <FlagIcon sx={{ mr: 1 }} />
