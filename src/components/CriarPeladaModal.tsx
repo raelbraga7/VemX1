@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import { auth } from '@/firebase/config';
 import { criarPelada } from '@/firebase/peladaService';
+import { createUser } from '@/firebase/userService';
 
 interface CriarPeladaModalProps {
   isOpen: boolean;
@@ -13,6 +14,22 @@ export default function CriarPeladaModal({ isOpen, onClose, onSuccess }: CriarPe
   const [nomePelada, setNomePelada] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Refresh de autenticação quando o modal abrir
+  useEffect(() => {
+    if (isOpen && auth.currentUser) {
+      const refreshToken = async () => {
+        try {
+          await auth.currentUser?.getIdToken(true);
+          console.log('Token de autenticação renovado');
+        } catch (error) {
+          console.warn('Erro ao renovar token:', error);
+        }
+      };
+      
+      refreshToken();
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,11 +38,36 @@ export default function CriarPeladaModal({ isOpen, onClose, onSuccess }: CriarPe
 
     try {
       if (!auth.currentUser) {
-        throw new Error('Usuário não autenticado');
+        throw new Error('Usuário não autenticado. Por favor, faça login novamente.');
       }
 
       if (!nomePelada.trim()) {
         throw new Error('Nome da pelada é obrigatório');
+      }
+      
+      // Tentar atualizar o token mais uma vez
+      try {
+        await auth.currentUser.getIdToken(true);
+      } catch (tokenError) {
+        console.warn('Alerta: Erro ao renovar token antes de criar pelada:', tokenError);
+        // Continua mesmo com erro no token
+      }
+      
+      // Garantir que o usuário tenha um registro no Firestore
+      try {
+        // Criar ou atualizar documento do usuário
+        const { uid, displayName, email } = auth.currentUser;
+        const userName = displayName || email?.split('@')[0] || 'Usuário';
+        await createUser(
+          uid,
+          userName,
+          email || '',
+          undefined
+        );
+        console.log('Perfil do usuário verificado/atualizado no Firestore');
+      } catch (userError) {
+        console.error('Erro ao verificar/atualizar perfil do usuário:', userError);
+        // Continua mesmo com erro no perfil
       }
 
       // Cria a pelada com configurações padrão
@@ -65,7 +107,11 @@ export default function CriarPeladaModal({ isOpen, onClose, onSuccess }: CriarPe
       }
     } catch (err) {
       console.error('Erro ao criar pelada:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao criar pelada');
+      if (err instanceof Error && err.message.includes('não autenticado')) {
+        setError('Sessão expirada. Por favor, faça logout e login novamente.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Erro ao criar pelada. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }

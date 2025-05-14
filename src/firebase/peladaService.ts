@@ -29,6 +29,21 @@ export const criarPelada = async (peladaData: Omit<PeladaData, 'id'>): Promise<s
       throw new Error("Usuário não autenticado");
     }
 
+    // Força a atualização do token para garantir que a sessão esteja válida
+    try {
+      await auth.currentUser.getIdToken(true);
+      console.log('Token de autenticação atualizado com sucesso');
+    } catch (tokenError) {
+      console.error('Erro ao atualizar token:', tokenError);
+      // Continua mesmo com erro no token, para verificar se ainda conseguimos criar
+    }
+
+    // Verificação adicional de autenticação
+    if (!auth.currentUser.uid) {
+      console.error('UID do usuário não disponível após verificação');
+      throw new Error("Problema com a autenticação do usuário. Por favor, faça login novamente.");
+    }
+
     // Valida o nome da pelada
     if (!peladaData.nome || peladaData.nome.trim().length === 0) {
       throw new Error("Nome da pelada é obrigatório");
@@ -37,7 +52,17 @@ export const criarPelada = async (peladaData: Omit<PeladaData, 'id'>): Promise<s
     // Busca os dados do dono para inicializar o ranking
     const ownerData = await getUserById(peladaData.ownerId);
     if (!ownerData) {
-      throw new Error("Dados do dono não encontrados");
+      // Tentativa extra de buscar dados do usuário pelo UID atual
+      console.warn('Dados do dono não encontrados. Tentando buscar pelo UID atual');
+      const currentUserData = await getUserById(auth.currentUser.uid);
+      if (!currentUserData) {
+        console.error('Não foi possível encontrar dados do usuário no Firestore');
+        throw new Error("Conta de usuário incompleta. Por favor, atualize seu perfil ou tente sair e entrar novamente.");
+      } else {
+        // Corrige o ownerId para usar o usuário atual
+        console.log('Corrigindo ownerId para usar o usuário atual:', auth.currentUser.uid);
+        peladaData.ownerId = auth.currentUser.uid;
+      }
     }
 
     // Garante que os arrays existam
