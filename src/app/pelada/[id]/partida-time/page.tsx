@@ -573,25 +573,33 @@ export default function PartidaTime() {
           setRodando(false);
           setTempoAcabou(true);
           
-          // Determine o vencedor quando o tempo acabar
+          // Determina o vencedor
           const vencedor = determinarVencedor();
-          
+          if (!vencedor) return;
+
           if (vencedor === 'empate') {
             toast('Tempo esgotado! A partida terminou empatada!');
-          } else if (vencedor) {
-            toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
           } else {
-            toast('Tempo esgotado!');
+            toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
           }
           
-          // Finalize a partida automaticamente
+          // Atualiza automaticamente o ranking quando o tempo acabar
           finalizarPartidaRef.current().then(success => {
             if (success) {
-              // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
-            } else {
-              // Falha ao finalizar automaticamente
-              toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
+              toast.success('Ranking atualizado automaticamente!');
+              setTempoAcabou(true);
+              
+              // Redirecionar direto para a página de times após finalizar a partida
+              // em vez de tentar abrir uma modal que não existe
+              setTimeout(() => {
+                router.push('/time');
+              }, 1500);
             }
+          }).catch(error => {
+            console.error('Erro ao atualizar ranking automaticamente:', error);
+            toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
+            // Em caso de erro, encerrar a tela de carregamento
+            setLoading(false);
           });
           
           return;
@@ -609,7 +617,7 @@ export default function PartidaTime() {
     return () => {
       clearInterval(intervalId);
     };
-  }, [rodando, minutos, segundos, determinarVencedor]);
+  }, [rodando, minutos, segundos, determinarVencedor, router]);
 
   if (loading) {
     return (
