@@ -12,6 +12,8 @@ import { LogoutButton } from '@/components/LogoutButton';
 import Link from 'next/link';
 import InviteButton from '@/components/InviteButton';
 import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/firebase/config';
 
 interface Time {
   nome: string;
@@ -43,6 +45,52 @@ export default function PaginaPelada() {
     }
   }, []);
 
+  // Efeito para verificar a assinatura independentemente da pelada
+  useEffect(() => {
+    if (!user) return;
+    
+    // Limpar estado anterior para prevenir exibição incorreta enquanto carrega
+    setTemAssinaturaAtiva(false);
+    
+    // Verificação da assinatura somente para o dono da pelada
+    if (peladaData && peladaData.ownerId === user.uid) {
+      console.log('[PaginaPelada] Configurando verificação de assinatura para o dono da pelada');
+      
+      // Configurar listener para atualizações em tempo real da assinatura
+      const userRef = doc(db, 'usuarios', user.uid);
+      const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
+        try {
+          if (docSnapshot.exists()) {
+            const userData = docSnapshot.data();
+            const statusAssinatura = userData?.statusAssinatura;
+            console.log(`[PaginaPelada] Status da assinatura atualizado: ${statusAssinatura}`);
+            
+            // Atualiza o estado com base nos dados do Firestore
+            setTemAssinaturaAtiva(
+              statusAssinatura === 'ativa' || statusAssinatura === 'teste'
+            );
+          } else {
+            console.log(`[PaginaPelada] Documento do usuário não encontrado`);
+            setTemAssinaturaAtiva(false);
+          }
+        } catch (error) {
+          console.error('[PaginaPelada] Erro ao processar atualização da assinatura:', error);
+          setTemAssinaturaAtiva(false);
+        }
+      }, (error) => {
+        console.error('[PaginaPelada] Erro no listener de assinatura:', error);
+      });
+      
+      // Verificação inicial
+      verificarAssinatura(user.uid);
+      
+      // Cleanup
+      return () => unsubscribe();
+    } else {
+      setVerificandoAssinatura(false);
+    }
+  }, [user, peladaData]);
+
   const fecharBanner = () => {
     localStorage.setItem('bannerFechado', 'true');
     setBannerFechado(true);
@@ -72,11 +120,6 @@ export default function PaginaPelada() {
           currentUserId: user?.uid,
           isDono: isDono
         });
-        
-        // Verificar assinatura somente se for o dono da pelada
-        if (isDono) {
-          await verificarAssinatura(user?.uid);
-        }
         
         setLoading(false);
       } catch (err) {
