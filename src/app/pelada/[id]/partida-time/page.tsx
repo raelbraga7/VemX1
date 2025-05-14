@@ -573,33 +573,25 @@ export default function PartidaTime() {
           setRodando(false);
           setTempoAcabou(true);
           
-          // Determina o vencedor
+          // Determine o vencedor quando o tempo acabar
           const vencedor = determinarVencedor();
-          if (!vencedor) return;
-
+          
           if (vencedor === 'empate') {
             toast('Tempo esgotado! A partida terminou empatada!');
-          } else {
+          } else if (vencedor) {
             toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
+          } else {
+            toast('Tempo esgotado!');
           }
           
-          // Atualiza automaticamente o ranking quando o tempo acabar
+          // Finalize a partida automaticamente
           finalizarPartidaRef.current().then(success => {
             if (success) {
-              toast.success('Ranking atualizado automaticamente!');
-              setTempoAcabou(true);
-              
-              // Redirecionar direto para a página de times após finalizar a partida
-              // em vez de tentar abrir uma modal que não existe
-              setTimeout(() => {
-                router.push('/time');
-              }, 1500);
+              // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
+            } else {
+              // Falha ao finalizar automaticamente
+              toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
             }
-          }).catch(error => {
-            console.error('Erro ao atualizar ranking automaticamente:', error);
-            toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
-            // Em caso de erro, encerrar a tela de carregamento
-            setLoading(false);
           });
           
           return;
@@ -617,7 +609,7 @@ export default function PartidaTime() {
     return () => {
       clearInterval(intervalId);
     };
-  }, [rodando, minutos, segundos, determinarVencedor, router]);
+  }, [rodando, minutos, segundos, determinarVencedor]);
 
   if (loading) {
     return (
