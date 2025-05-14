@@ -14,7 +14,6 @@ interface AssinaturaButtonProps {
 export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
   const { user, temAssinaturaAtiva } = useUser();
   const [loading, setLoading] = useState(true);
-  const [cancelando, setCancelando] = useState(false);
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
   
   useEffect(() => {
@@ -32,36 +31,19 @@ export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
   
   const handleAssinatura = async () => {
     if (temAssinaturaAtiva) {
-      try {
-        setCancelando(true);
-        console.log(`Iniciando cancelamento para usuário: ${user?.uid}`);
-        
-        // Usar o caminho correto para a API
-        const apiUrl = '/api/usuario/cancelar-manual';
-        
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ userId: user?.uid }),
-        });
-
-        const data = await response.json();
-        console.log('Resposta do servidor:', data);
-
-        if (response.ok) {
-          toast.success('Assinatura cancelada com sucesso!');
-        } else {
-          console.error('Erro na resposta:', data);
-          toast.error(`Erro ao cancelar assinatura: ${data.error || 'Tente novamente'}`);
-        }
-      } catch (error) {
-        console.error('Erro ao cancelar assinatura:', error);
-        toast.error('Falha na comunicação com o servidor. Verifique sua conexão.');
-      } finally {
-        setCancelando(false);
-      }
+      // Redirecionar para a página de gerenciamento de assinatura da Hotmart
+      const hotmartClientURL = 'https://app-vlc.hotmart.com/login';
+      
+      // Informar ao usuário como proceder
+      toast.success(
+        'Para cancelar sua assinatura, você será redirecionado para a Hotmart. Faça login e acesse "Minhas Compras" para gerenciar sua assinatura.',
+        { duration: 6000 }
+      );
+      
+      // Pequeno delay para que o usuário leia a mensagem
+      setTimeout(() => {
+        window.open(hotmartClientURL, '_blank');
+      }, 2000);
     } else {
       setIsPlanosModalOpen(true);
     }
@@ -86,18 +68,15 @@ export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
     <>
       <button 
         onClick={handleAssinatura}
-        disabled={cancelando}
         className={`px-4 py-2 rounded ${
           temAssinaturaAtiva
             ? 'bg-red-600 hover:bg-red-700' 
             : 'bg-blue-600 hover:bg-blue-700'
-        } text-white disabled:opacity-70 transition-all`}
+        } text-white`}
       >
-        {cancelando 
-          ? 'Cancelando...' 
-          : temAssinaturaAtiva 
-            ? 'Cancelar Assinatura' 
-            : 'Assinatura'}
+        {temAssinaturaAtiva
+          ? 'Cancelar Assinatura' 
+          : 'Assinatura'}
       </button>
       
       {isPlanosModalOpen && (
