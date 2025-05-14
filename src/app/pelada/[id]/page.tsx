@@ -10,6 +10,7 @@ import RankingTable from '@/components/RankingTable';
 import SeasonTable from '@/components/SeasonTable';
 import { LogoutButton } from '@/components/LogoutButton';
 import Link from 'next/link';
+import InviteButton from '@/components/InviteButton';
 
 interface Time {
   nome: string;
@@ -111,6 +112,9 @@ export default function PaginaPelada() {
               >
                 Configurar Pelada
               </button>
+            )}
+            {peladaData?.ownerId === user?.uid && (
+              <InviteButton peladaId={params?.id as string} />
             )}
             <LogoutButton />
           </div>
