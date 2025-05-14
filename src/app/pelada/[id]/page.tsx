@@ -37,6 +37,11 @@ export default function PaginaPelada() {
         if (!id || typeof id !== 'string') {
           throw new Error('ID da pelada inválido');
         }
+        
+        // Salvar o ID da pelada no localStorage para referência futura
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('ultimaPeladaIdVisitada', id);
+        }
 
         // Verifica se deve abrir a modal
         const showModalParam = searchParams?.get('showModal');
