@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, getRedirectResult, signInWithRedirect, signInWithPopup, GoogleAuthProvider, AuthError } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, getRedirectResult, signInWithRedirect, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/firebase/config';
 import { useInvite } from '@/hooks/useInvite';
 import { useUser } from '@/contexts/UserContext';
@@ -299,98 +299,94 @@ export default function Login() {
     setError('');
     
     try {
-      // Primeiramente, verificamos se existe uma conta com esse email no Firebase
-      // Isso vai prevenir a criação automática de contas
+      // Implementação mais robusta para evitar a criação automática de usuários
       const provider = new GoogleAuthProvider();
+      
+      // Forçar seleção de conta e não permitir criação automática
       provider.setCustomParameters({
-        prompt: 'select_account' // Força seleção de conta
+        prompt: 'select_account',
+        // Parâmetro especial para não criar usuário automaticamente
+        'login_hint': 'existing-users-only'
       });
       
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        await signInWithRedirect(auth, provider);
-        return; // O resultado será processado pelo useEffect de redirecionamento
-      }
+      let googleUser;
       
       try {
-        const result = await signInWithPopup(auth, provider);
-        const googleUser = result.user;
+        if (isMobile) {
+          // Em dispositivos móveis, usar redirecionamento
+          await signInWithRedirect(auth, provider);
+          return; // Será tratado pelo useEffect de redirecionamento
+        } else {
+          // Em desktop, usar popup
+          const result = await signInWithPopup(auth, provider);
+          googleUser = result.user;
+        }
         
+        // Se chegou aqui, autenticou com sucesso, verificar se existe no Firestore
         if (googleUser) {
-          console.log('Login com Google realizado com sucesso via popup:', googleUser.uid);
+          console.log('Usuário autenticado com Google, verificando no Firestore:', googleUser.uid);
           
-          try {
-            // Verificar se o usuário existe no Firestore
-            const userDoc = await getUser(googleUser.uid);
-            
-            if (!userDoc) {
-              console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
-              
-              // Fazer logout
-              await auth.signOut();
-              
-              // Mostrar mensagem de erro em vez de redirecionar
-              setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
-              return;
-            }
-            
-            // Resetar tentativas após sucesso
-            tentativasDeLogin = 0;
-            
-            // Se não tiver peladaId, redireciona para o dashboard
-            if (!peladaId) {
-              router.push('/dashboard');
-            }
-            // Se tiver peladaId, o useEffect vai cuidar de processar o convite
-          } catch (verificaErro) {
-            console.error('Erro ao verificar usuário no Firestore:', verificaErro);
+          // Verificar no Firestore
+          const userDoc = await getUser(googleUser.uid);
+          
+          if (!userDoc) {
+            console.log('Usuário não encontrado no Firestore, fazendo logout:', googleUser.uid);
+            // Fazer logout se não existir
             await auth.signOut();
             setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+            return;
           }
+          
+          console.log('Usuário encontrado no Firestore:', googleUser.uid);
+          // Resetar tentativas após sucesso
+          tentativasDeLogin = 0;
+          
+          // Redirecionar para o destino apropriado
+          if (!peladaId) {
+            router.push('/dashboard');
+          }
+          // Se tiver peladaId, o useEffect vai processar o convite
         }
-      } catch (error: unknown) {
-        console.error('Erro no popup do Google:', error);
+      } catch (authError: unknown) {
+        const error = authError as { code?: string; message?: string };
+        console.error('Erro específico na autenticação Google:', error?.code, authError);
         
-        const popupError = error as AuthError;
-        
-        // Se o popup falhar por usuário não existente ou credenciais inválidas
-        if (popupError.code === 'auth/account-exists-with-different-credential' ||
-            popupError.code === 'auth/user-not-found' ||
-            popupError.code === 'auth/invalid-credential') {
+        if (error?.code === 'auth/account-exists-with-different-credential' ||
+            error?.code === 'auth/user-not-found' ||
+            error?.code === 'auth/invalid-credential') {
           setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
           return;
         }
         
-        // Se for outro tipo de erro (como cancelamento), apenas redireciona
-        if (popupError.code === 'auth/cancelled-popup-request' || 
-            popupError.code === 'auth/popup-closed-by-user') {
+        if (error?.code === 'auth/popup-closed-by-user' || 
+            error?.code === 'auth/cancelled-popup-request') {
           setError('Login cancelado. Tente novamente.');
           return;
         }
         
-        if (popupError.code === 'auth/unauthorized-domain') {
+        if (error?.code === 'auth/unauthorized-domain') {
           setError('Este domínio não está autorizado para login com Google. Entre em contato com o suporte.');
           return;
         }
         
-        // Outros erros
+        // Verificar se o usuário foi autenticado mas podemos tratá-lo
+        if (auth.currentUser) {
+          console.log('Usuário autenticado com problemas, fazendo logout');
+          await auth.signOut();
+        }
+        
         setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
       }
     } catch (err: unknown) {
-      console.error('Erro no login com Google:', err);
+      console.error('Erro geral no login com Google:', err);
       
-      const googleError = err as { code?: string, message: string };
-      
-      // O usuário cancelou o login
-      if (googleError.code === 'auth/cancelled-popup-request' || 
-          googleError.code === 'auth/popup-closed-by-user') {
-        setError('Login cancelado. Tente novamente.');
-      } else if (googleError.code === 'auth/unauthorized-domain') {
-        setError('Este domínio não está autorizado para login com Google. Entre em contato com o suporte.');
-      } else {
-        setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
+      // Sempre garantir que não tenha um usuário logado em caso de erro
+      if (auth.currentUser) {
+        await auth.signOut();
       }
+      
+      setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
     } finally {
       setLoading(false);
     }
