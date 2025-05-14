@@ -34,6 +34,9 @@ function Header() {
   const [isOwner, setIsOwner] = useState(false);
   const pathname = usePathname();
   const unreadCount = notifications.filter(n => !n.read).length;
+  
+  // Verificar se estamos na página de partida para esconder o botão de assinatura
+  const showAssinaturaButton = !pathname?.includes('/partida');
 
   // Verificar se o usuário é dono da pelada, baseado no path
   useEffect(() => {
@@ -212,7 +215,7 @@ function Header() {
         
         {user && (
           <div className="flex items-center space-x-2">
-            <AssinaturaButton isOwner={isOwner} />
+            {showAssinaturaButton && <AssinaturaButton isOwner={isOwner} />}
             <NotificationBell 
               count={unreadCount} 
               onClick={() => setIsNotificationsPanelOpen(true)} 
