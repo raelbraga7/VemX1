@@ -635,24 +635,26 @@ export default function Partida() {
     try {
       setLoading(true);
       
-      const rankingAtualizado = await handleFinalizarPartida();
-      
-      if (!rankingAtualizado) {
-        toast.error('Erro ao atualizar o ranking');
-        setLoading(false);
-        return;
+      // Tenta finalizar a partida e atualizar o ranking, mas não bloqueia se falhar
+      try {
+        const rankingAtualizado = await handleFinalizarPartida();
+        console.log('Ranking atualizado com sucesso:', rankingAtualizado);
+      } catch (rankingError) {
+        console.error('Erro ao tentar atualizar o ranking:', rankingError);
+        // Continua mesmo com erro no ranking
       }
 
       // Preparar para a próxima partida
       // Busca os times gerados da página anterior com fallbacks
       const timesGeradosString = localStorage.getItem(`timesGerados_${params?.id}`) || 
-                                 localStorage.getItem(`timesPartida_${params?.id}`) ||
-                                 localStorage.getItem(`timesUltimos`);
+                               localStorage.getItem(`timesPartida_${params?.id}`) ||
+                               localStorage.getItem(`timesUltimos`);
       
       if (timesGeradosString) {
         try {
           // Usa os times disponíveis
           const times = JSON.parse(timesGeradosString) as Time[];
+          console.log('Times carregados para seleção:', times);
           
           // Reseta os gols e assistências dos times
           const timesResetados = times.map(time => ({
@@ -677,20 +679,32 @@ export default function Partida() {
           
           // Abre o modal com o resumo da partida
           setOpenModal(true);
+          setPartidaFinalizada(true);
+          console.log('Modal aberto com times carregados');
         } catch (parseError) {
           console.error('Erro ao processar times:', parseError);
           toast.error('Formato de times inválido');
-          router.push(`/pelada/${params?.id}/confirmar`);
+          
+          // Mesmo com erro, tenta abrir o modal
+          setOpenModal(true);
+          setPartidaFinalizada(true);
         }
       } else {
-        // Caso não encontre times, redireciona para página de confirmação
-        router.push(`/pelada/${params?.id}/confirmar`);
+        console.warn('Nenhum time encontrado para seleção');
+        toast.error('Não foi possível carregar os times. Tente novamente.');
+        setOpenModal(true);
+        setPartidaFinalizada(true);
       }
     } catch (error) {
-      console.error('Erro ao finalizar partida:', error);
+      console.error('Erro ao abrir modal:', error);
+      toast.error('Erro ao abrir o modal de finalização');
+      // Última tentativa de abrir o modal mesmo com erro
+      setOpenModal(true);
+      setPartidaFinalizada(true);
+    } finally {
       setLoading(false);
     }
-  }, [handleFinalizarPartida, params?.id, router]);
+  }, [handleFinalizarPartida, params?.id]);
 
   // Efeito para o cronômetro (apenas regressivo)
   useEffect(() => {
@@ -715,18 +729,25 @@ export default function Partida() {
           
           // Atualiza automaticamente o ranking quando o tempo acabar
           finalizarPartidaRef.current().then(success => {
-            if (success) {
-              toast.success('Ranking atualizado automaticamente!');
-              setPartidaFinalizada(true);
-              
-              // Abre o modal automaticamente após finalizar a partida
-              setTimeout(() => {
-                handleOpenModal();
-              }, 1500); // Pequeno delay para dar tempo das toast notifications
-            }
+            console.log('Resultado da finalização automática da partida:', success);
+            toast.success('Ranking atualizado automaticamente!');
+            setPartidaFinalizada(true);
+            
+            // Abre o modal automaticamente após finalizar a partida
+            setTimeout(() => {
+              handleOpenModal();
+              console.log('Modal aberto automaticamente após finalizar partida');
+            }, 1500); // Pequeno delay para dar tempo das toast notifications
           }).catch(error => {
             console.error('Erro ao atualizar ranking automaticamente:', error);
-            toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
+            toast.error('Erro ao atualizar ranking automaticamente. Abrindo modal mesmo assim.');
+            
+            // Mesmo com erro, tenta abrir o modal
+            setTimeout(() => {
+              setPartidaFinalizada(true);
+              handleOpenModal();
+              console.log('Modal aberto mesmo após erro na finalização');
+            }, 1500);
           });
           
           return;
@@ -875,36 +896,56 @@ export default function Partida() {
       const peladaId = params?.id;
       console.log('DEBUG: ID da pelada utilizado:', peladaId);
       
-      // SOLUÇÃO 2: Salvar com diferentes nomes para redundância
-      localStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
-      localStorage.setItem(`timesPartidaBackup_${peladaId}`, JSON.stringify(timesPartida));
-      localStorage.setItem(`timesUltimos`, JSON.stringify(timesPartida)); // Nome genérico para backup
-      
-      // SOLUÇÃO 3: Usar sessionStorage também como backup
-      sessionStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
-      
-      // SOLUÇÃO 4: Salvar em uma variável global
       try {
-        // @ts-expect-error - Adicionar ao objeto window para emergência
-        window.timesPartidaGlobal = timesPartida;
-      } catch (e) {
-        console.warn('DEBUG: Não foi possível salvar na variável global', e);
-      }
-      
-      // SOLUÇÃO 5: Atualizar no Firestore (opcional)
-      try {
-        if (peladaId && typeof peladaId === 'string') {
-          const peladaRef = doc(db, 'peladas', peladaId);
-          updateDoc(peladaRef, {
-            timesPartidaAtual: timesPartida
-          }).then(() => {
-            console.log('DEBUG: Times salvos no Firestore com sucesso');
-          }).catch(e => {
-            console.error('DEBUG: Erro ao salvar times no Firestore', e);
-          });
+        // Código de salvamento com verificação de sucesso
+        localStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
+        // Verificar se foi salvo corretamente
+        const verificacao = localStorage.getItem(`timesPartida_${peladaId}`);
+        if (!verificacao) {
+          throw new Error('Falha ao verificar times salvos');
         }
-      } catch (e) {
-        console.error('DEBUG: Erro ao atualizar times no Firestore', e);
+        console.log('Times salvos com sucesso no localStorage principal');
+        
+        // Backups adicionais
+        localStorage.setItem(`timesPartidaBackup_${peladaId}`, JSON.stringify(timesPartida));
+        localStorage.setItem(`timesUltimos`, JSON.stringify(timesPartida));
+        sessionStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
+        
+        // SOLUÇÃO 4: Salvar em uma variável global
+        try {
+          // @ts-expect-error - Adicionar ao objeto window para emergência
+          window.timesPartidaGlobal = timesPartida;
+        } catch (e) {
+          console.warn('DEBUG: Não foi possível salvar na variável global', e);
+        }
+        
+        // SOLUÇÃO 5: Atualizar no Firestore (opcional)
+        try {
+          if (peladaId && typeof peladaId === 'string') {
+            const peladaRef = doc(db, 'peladas', peladaId);
+            updateDoc(peladaRef, {
+              timesPartidaAtual: timesPartida
+            }).then(() => {
+              console.log('DEBUG: Times salvos no Firestore com sucesso');
+            }).catch(e => {
+              console.error('DEBUG: Erro ao salvar times no Firestore', e);
+            });
+          }
+        } catch (e) {
+          console.error('DEBUG: Erro ao atualizar times no Firestore', e);
+        }
+      } catch (storageError) {
+        console.error('Erro ao salvar no localStorage:', storageError);
+        toast.error('Erro ao salvar os times. Verificando alternativas...');
+        
+        // Tenta usar apenas o sessionStorage como último recurso
+        try {
+          sessionStorage.setItem(`timesPartida_${peladaId}`, JSON.stringify(timesPartida));
+          console.log('Times salvos no sessionStorage como alternativa');
+        } catch (e) {
+          console.error('Erro crítico: Não foi possível salvar os times em nenhum local', e);
+          toast.error('Erro crítico: Não foi possível salvar os times');
+        }
       }
 
       // Atualiza os times e fecha o modal
