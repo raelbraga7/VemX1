@@ -8,7 +8,7 @@ import { useInvite } from '@/hooks/useInvite';
 import { useUser } from '@/contexts/UserContext';
 import Link from 'next/link';
 import { signInWithGoogle, getGoogleRedirectResult } from '@/firebase/auth';
-import { getUser } from '@/firebase/userService';
+import { getUser, createUser } from '@/firebase/userService';
 
 // Contador improvisado para evitar bloqueio por muitas tentativas
 let tentativasDeLogin = 0;
@@ -146,15 +146,25 @@ export default function Login() {
             // Verificar se o usuário existe no Firestore
             const userDoc = await getUser(googleUser.uid);
             if (!userDoc) {
-              console.log('Usuário autenticado, mas não existe no Firestore. Redirecionando para cadastro:', googleUser.uid);
+              console.log('Usuário autenticado por redirecionamento, mas não existe no Firestore. Criando perfil:', googleUser.uid);
               
-              // Redirecionar para página de cadastro
-              if (peladaId) {
-                router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
-              } else {
-                router.push('/cadastro');
+              // Criar perfil do usuário automaticamente
+              try {
+                const displayName = googleUser.displayName || 'Usuário Google';
+                const userEmail = googleUser.email || '';
+                
+                await createUser(
+                  googleUser.uid,
+                  displayName,
+                  userEmail,
+                  convidadoPor || undefined
+                );
+                
+                console.log('Perfil criado automaticamente no Firestore após redirecionamento');
+              } catch (createError) {
+                console.error('Erro ao criar perfil automaticamente após redirecionamento:', createError);
+                // Continua mesmo se houver erro, para não bloquear o login
               }
-              return;
             }
             
             // Se não tiver peladaId, redireciona para o dashboard
@@ -302,15 +312,25 @@ export default function Login() {
         // Verificar se o usuário existe no Firestore
         const userDoc = await getUser(googleUser.uid);
         if (!userDoc) {
-          console.log('Usuário autenticado, mas não existe no Firestore. Redirecionando para cadastro:', googleUser.uid);
+          console.log('Usuário autenticado, mas não existe no Firestore. Criando perfil:', googleUser.uid);
           
-          // Redirecionar para página de cadastro
-          if (peladaId) {
-            router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
-          } else {
-            router.push('/cadastro');
+          // Criar perfil do usuário automaticamente
+          try {
+            const displayName = googleUser.displayName || 'Usuário Google';
+            const userEmail = googleUser.email || '';
+            
+            await createUser(
+              googleUser.uid,
+              displayName,
+              userEmail,
+              convidadoPor || undefined
+            );
+            
+            console.log('Perfil criado automaticamente no Firestore');
+          } catch (createError) {
+            console.error('Erro ao criar perfil automaticamente:', createError);
+            // Continua mesmo se houver erro, para não bloquear o login
           }
-          return;
         }
         
         // Resetar tentativas após sucesso
