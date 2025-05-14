@@ -101,9 +101,6 @@ export default function Partida() {
   // Referência para a função de finalizar partida
   const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
 
-  // Adicionar um estado para controlar se o ranking já foi atualizado
-  const [rankingAtualizado, setRankingAtualizado] = useState(false);
-
   // Função para carregar os times salvos
   const carregarTimesSalvos = useCallback(() => {
     try {
@@ -400,12 +397,11 @@ export default function Partida() {
 
         const resultado = timeAVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
         
-        // Assegura que estamos usando o número exato de gols
+        // Obter contagem exata de gols e assistências
         const golsNum = Number(jogador.gols) || 0;
         const assistenciasNum = Number(jogador.assistencias) || 0;
-        
-        console.log(`[DEBUG] Jogador ${jogador.nome} marcou ${golsNum} gols nesta partida`);
 
+        // Obter ranking atual ou criar base se não existir
         const rankingAtual = peladaData.ranking?.[jogadorId] || {
           jogos: 0,
           gols: 0,
@@ -416,32 +412,33 @@ export default function Partida() {
           pontos: 0,
           nome: jogador.nome
         };
-        
-        console.log(`[DEBUG] Ranking atual de ${jogador.nome}: ${rankingAtual.gols} gols`);
+
+        // Log para diagnóstico
+        console.log(`[DEBUG] Jogador: ${jogador.nome}, ID: ${jogadorId}`);
+        console.log(`[DEBUG] Gols na partida atual: ${golsNum}`);
+        console.log(`[DEBUG] Gols no ranking antes: ${rankingAtual.gols}`);
+        console.log(`[DEBUG] Gols no ranking depois: ${rankingAtual.gols + golsNum}`);
 
         // Calcula os pontos com a tabela de pontuação
         const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
         const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
         const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
-        const pontosPorGols = golsNum * 2; // +2 por gol (pontuação, não quantidade)
-        const pontosPorAssistencias = assistenciasNum * 1; // +1 por assistência
-        const pontosPorParticipacao = 0.5; // +0.5 por participação
+        const pontosPorGols = golsNum * 2; // +2 pontos na tabela por cada gol
+        const pontosPorAssistencias = assistenciasNum * 1; // +1 ponto na tabela por cada assistência
+        const pontosPorParticipacao = 0.5; // +0.5 ponto na tabela por participação
         
         const pontosTotais = Math.max(0, (rankingAtual.pontos || 0) + 
-                             pontosPorVitoria + 
-                             pontosPorDerrota + 
-                             pontosPorEmpate + 
-                             pontosPorGols + 
-                             pontosPorAssistencias +
-                             pontosPorParticipacao);
-        
-        // Quantidade exata de gols como marcado na partida
-        const golsAtualizados = (rankingAtual.gols || 0) + golsNum;
-        console.log(`[DEBUG] Atualizando gols para ${jogador.nome}: ${rankingAtual.gols} + ${golsNum} = ${golsAtualizados}`);
+                            pontosPorVitoria + 
+                            pontosPorDerrota + 
+                            pontosPorEmpate + 
+                            pontosPorGols + 
+                            pontosPorAssistencias +
+                            pontosPorParticipacao);
 
+        // Salvar no ranking final - Usar o golsNum EXATAMENTE como está no estado do jogador
         rankingFinal[jogadorId] = {
           jogos: (rankingAtual.jogos || 0) + 1,
-          gols: golsAtualizados,
+          gols: (rankingAtual.gols || 0) + golsNum, // Adiciona exatamente os gols desta partida
           assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
           vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
           derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
@@ -459,12 +456,11 @@ export default function Partida() {
 
         const resultado = timeBVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
         
-        // Assegura que estamos usando o número exato de gols
+        // Obter contagem exata de gols e assistências
         const golsNum = Number(jogador.gols) || 0;
         const assistenciasNum = Number(jogador.assistencias) || 0;
-        
-        console.log(`[DEBUG] Jogador ${jogador.nome} marcou ${golsNum} gols nesta partida`);
 
+        // Obter ranking atual ou criar base se não existir
         const rankingAtual = peladaData.ranking?.[jogadorId] || {
           jogos: 0,
           gols: 0,
@@ -475,32 +471,33 @@ export default function Partida() {
           pontos: 0,
           nome: jogador.nome
         };
-        
-        console.log(`[DEBUG] Ranking atual de ${jogador.nome}: ${rankingAtual.gols} gols`);
+
+        // Log para diagnóstico
+        console.log(`[DEBUG] Jogador: ${jogador.nome}, ID: ${jogadorId}`);
+        console.log(`[DEBUG] Gols na partida atual: ${golsNum}`);
+        console.log(`[DEBUG] Gols no ranking antes: ${rankingAtual.gols}`);
+        console.log(`[DEBUG] Gols no ranking depois: ${rankingAtual.gols + golsNum}`);
 
         // Calcula os pontos com a tabela de pontuação
         const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
         const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
         const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
-        const pontosPorGols = golsNum * 2; // +2 por gol (pontuação)
-        const pontosPorAssistencias = assistenciasNum * 1; // +1 por assistência
-        const pontosPorParticipacao = 0.5; // +0.5 por participação
+        const pontosPorGols = golsNum * 2; // +2 pontos na tabela por cada gol
+        const pontosPorAssistencias = assistenciasNum * 1; // +1 ponto na tabela por cada assistência
+        const pontosPorParticipacao = 0.5; // +0.5 ponto na tabela por participação
         
         const pontosTotais = Math.max(0, (rankingAtual.pontos || 0) + 
-                             pontosPorVitoria + 
-                             pontosPorDerrota + 
-                             pontosPorEmpate + 
-                             pontosPorGols + 
-                             pontosPorAssistencias +
-                             pontosPorParticipacao);
-        
-        // Quantidade exata de gols como marcado na partida
-        const golsAtualizados = (rankingAtual.gols || 0) + golsNum;
-        console.log(`[DEBUG] Atualizando gols para ${jogador.nome}: ${rankingAtual.gols} + ${golsNum} = ${golsAtualizados}`);
+                            pontosPorVitoria + 
+                            pontosPorDerrota + 
+                            pontosPorEmpate + 
+                            pontosPorGols + 
+                            pontosPorAssistencias +
+                            pontosPorParticipacao);
 
+        // Salvar no ranking final - Usar o golsNum EXATAMENTE como está no estado do jogador
         rankingFinal[jogadorId] = {
           jogos: (rankingAtual.jogos || 0) + 1,
-          gols: golsAtualizados,
+          gols: (rankingAtual.gols || 0) + golsNum, // Adiciona exatamente os gols desta partida
           assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
           vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
           derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
@@ -510,6 +507,9 @@ export default function Partida() {
         };
       }
       
+      // Log final para diagnosticar o ranking completo
+      console.log('[DEBUG] Ranking final completo:', JSON.stringify(rankingFinal, null, 2));
+
       // Verifica se há alguma atualização para ser feita
       if (Object.keys(rankingFinal).length === 0) {
         console.error('Nenhuma atualização de ranking para enviar!');
@@ -659,20 +659,12 @@ export default function Partida() {
       setLoading(true);
       
       // Tenta finalizar a partida e atualizar o ranking, mas não bloqueia se falhar
-      // Verifica se o ranking já foi atualizado para não duplicar
-      if (!rankingAtualizado) {
-        try {
-          const rankingAtualizado = await handleFinalizarPartida();
-          console.log('Ranking atualizado com sucesso:', rankingAtualizado);
-          if (rankingAtualizado) {
-            setRankingAtualizado(true); // Marca como atualizado para evitar duplicações
-          }
-        } catch (rankingError) {
-          console.error('Erro ao tentar atualizar o ranking:', rankingError);
-          // Continua mesmo com erro no ranking
-        }
-      } else {
-        console.log('Ranking já foi atualizado anteriormente, ignorando atualização duplicada');
+      try {
+        const rankingAtualizado = await handleFinalizarPartida();
+        console.log('Ranking atualizado com sucesso:', rankingAtualizado);
+      } catch (rankingError) {
+        console.error('Erro ao tentar atualizar o ranking:', rankingError);
+        // Continua mesmo com erro no ranking
       }
 
       // Preparar para a próxima partida
@@ -758,44 +750,28 @@ export default function Partida() {
             toast.success(`Tempo esgotado! ${vencedor.nome} venceu a partida!`);
           }
           
-          // Atualiza automaticamente o ranking quando o tempo acabar, apenas se ainda não foi atualizado
-          if (!rankingAtualizado) {
-            finalizarPartidaRef.current().then(success => {
-              console.log('Resultado da finalização automática da partida:', success);
-              
-              if (success) {
-                toast.success('Ranking atualizado automaticamente!');
-                setRankingAtualizado(true); // Marca como atualizado para evitar duplicações
-                setPartidaFinalizada(true);
-                
-                // Abre o modal automaticamente após finalizar a partida
-                setTimeout(() => {
-                  handleOpenModal();
-                  console.log('Modal aberto automaticamente após finalizar partida');
-                }, 1500); // Pequeno delay para dar tempo das toast notifications
-              } else {
-                // Se falhou, permite que o usuário tente manualmente
-                toast.error('Falha ao atualizar ranking automaticamente. Tente finalizar manualmente.');
-              }
-            }).catch(error => {
-              console.error('Erro ao atualizar ranking automaticamente:', error);
-              toast.error('Erro ao atualizar ranking automaticamente. Abrindo modal mesmo assim.');
-              
-              // Mesmo com erro, tenta abrir o modal
-              setTimeout(() => {
-                setPartidaFinalizada(true);
-                handleOpenModal();
-                console.log('Modal aberto mesmo após erro na finalização');
-              }, 1500);
-            });
-          } else {
-            console.log('Ranking já foi atualizado, ignorando atualização automática duplicada');
-            // Se o ranking já foi atualizado, apenas abre o modal
+          // Atualiza automaticamente o ranking quando o tempo acabar
+          finalizarPartidaRef.current().then(success => {
+            console.log('Resultado da finalização automática da partida:', success);
+            toast.success('Ranking atualizado automaticamente!');
+            setPartidaFinalizada(true);
+            
+            // Abre o modal automaticamente após finalizar a partida
+            setTimeout(() => {
+              handleOpenModal();
+              console.log('Modal aberto automaticamente após finalizar partida');
+            }, 1500); // Pequeno delay para dar tempo das toast notifications
+          }).catch(error => {
+            console.error('Erro ao atualizar ranking automaticamente:', error);
+            toast.error('Erro ao atualizar ranking automaticamente. Abrindo modal mesmo assim.');
+            
+            // Mesmo com erro, tenta abrir o modal
             setTimeout(() => {
               setPartidaFinalizada(true);
               handleOpenModal();
+              console.log('Modal aberto mesmo após erro na finalização');
             }, 1500);
-          }
+          });
           
           return;
         }
