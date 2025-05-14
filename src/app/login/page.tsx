@@ -152,14 +152,8 @@ export default function Login() {
               // Fazer logout
               await auth.signOut();
               
-              // Redirecionar para página de cadastro
-              if (peladaId) {
-                router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
-              } else {
-                router.push('/cadastro');
-              }
-              
-              setError('Conta não encontrada. Por favor, complete seu cadastro.');
+              // Mostrar mensagem de erro em vez de redirecionar
+              setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
               return;
             }
             
@@ -314,14 +308,8 @@ export default function Login() {
           // Fazer logout
           await auth.signOut();
           
-          // Redirecionar para página de cadastro
-          if (peladaId) {
-            router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
-          } else {
-            router.push('/cadastro');
-          }
-          
-          setError('Conta não encontrada. Por favor, complete seu cadastro.');
+          // Mostrar mensagem de erro em vez de redirecionar
+          setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
           return;
         }
         
