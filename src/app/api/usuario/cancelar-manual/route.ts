@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
 
 export async function POST(req: NextRequest) {
+  // Configurar headers CORS para permitir solicitações de qualquer origem
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+  
+  // Responder a solicitações OPTIONS (preflight requests)
+  if (req.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 204, headers });
+  }
+  
   try {
     console.log('[API] Iniciando cancelamento manual de assinatura (teste)');
     
@@ -13,7 +25,7 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json(
         { error: 'ID do usuário é obrigatório' },
-        { status: 400 }
+        { status: 400, headers }
       );
     }
     
@@ -25,7 +37,7 @@ export async function POST(req: NextRequest) {
       console.log(`[API] Usuário não encontrado: ${userId}`);
       return NextResponse.json(
         { error: 'Usuário não encontrado' },
-        { status: 404 }
+        { status: 404, headers }
       );
     }
     
@@ -44,13 +56,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'Assinatura cancelada com sucesso'
-      });
+      }, { headers });
     } catch (dbError) {
       console.error('[API] Erro ao atualizar status no Firestore:', dbError);
       
       return NextResponse.json(
         { error: 'Erro ao cancelar assinatura no banco de dados' },
-        { status: 500 }
+        { status: 500, headers }
       );
     }
   } catch (error) {
@@ -58,7 +70,19 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json(
       { error: 'Erro interno no servidor' },
-      { status: 500 }
+      { status: 500, headers }
     );
   }
+}
+
+export async function OPTIONS() {
+  // Manipulador específico para requisições OPTIONS
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 } 
