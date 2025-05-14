@@ -63,9 +63,9 @@ export default function Cadastro() {
       
       // Redirecionar para a página apropriada
       if (peladaId) {
-        router.push(`/login?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+        router.push(`/login?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}&cadastroSucesso=true`);
       } else {
-        router.push('/dashboard');
+        router.push('/login?cadastroSucesso=true');
       }
     } catch (error: unknown) {
       console.error('Erro ao criar conta:', error);
@@ -126,9 +126,9 @@ export default function Cadastro() {
 
       // Redirecionar para a página apropriada
       if (peladaId) {
-        router.push(`/login?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+        router.push(`/login?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}&cadastroSucesso=true`);
       } else {
-        router.push('/dashboard');
+        router.push('/login?cadastroSucesso=true');
       }
     } catch (err: unknown) {
       console.error('Erro no cadastro com Google:', err);
