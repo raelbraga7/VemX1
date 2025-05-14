@@ -37,11 +37,6 @@ export default function PaginaPelada() {
         if (!id || typeof id !== 'string') {
           throw new Error('ID da pelada inválido');
         }
-        
-        // Salvar o ID da pelada no localStorage para referência futura
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('ultimaPeladaIdVisitada', id);
-        }
 
         // Verifica se deve abrir a modal
         const showModalParam = searchParams?.get('showModal');
@@ -121,14 +116,14 @@ export default function PaginaPelada() {
           </div>
         </div>
         
-        {/* Menu de navegação */}
+        {/* Navegação PELADA/TIME */}
         <div className="bg-white border-b border-gray-200 mb-6">
           <div className="container mx-auto">
             <div className="flex space-x-8 border-b">
-              <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
+              <Link href={`/pelada/${params?.id}`} className="relative py-4 px-6 font-medium text-sm text-blue-600">
                 PELADA
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
-              </button>
+              </Link>
               <Link href="/time" className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
                 TIME
               </Link>

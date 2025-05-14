@@ -161,58 +161,10 @@ export default function TimeSelecionado() {
           setIsOwner(peladaDocData.ownerId === user.uid);
 
           // Agora que temos o ID da pelada, podemos buscar os times
-          const unsubscribe = buscarTimes(peladaDoc.id);
+          buscarTimes(peladaDoc.id);
           
           // Verificar times existentes e adicionar ao ranking se necessário
           await verificarTimesSemRanking(peladaDoc.id, peladaDocData);
-          
-          // Limpar a inscrição quando o componente for desmontado
-          return () => unsubscribe();
-        } else {
-          // Caso especial para usuários convidados que não têm peladas próprias
-          // Verificar se há algum ID de pelada armazenado no localStorage
-          const ultimaPeladaIdVisitada = localStorage.getItem('ultimaPeladaIdVisitada');
-          
-          if (ultimaPeladaIdVisitada) {
-            try {
-              // Buscar a pelada diretamente pelo ID
-              const peladaRef = doc(db, 'peladas', ultimaPeladaIdVisitada);
-              const peladaDocSnapshot = await getDoc(peladaRef);
-              
-              if (peladaDocSnapshot.exists()) {
-                const peladaDocData = peladaDocSnapshot.data() as PeladaData;
-                
-                // Verificar se o usuário está na lista de jogadores
-                if (peladaDocData.players.includes(user.uid)) {
-                  // Armazenar os dados completos da pelada
-                  setPeladaData({
-                    id: peladaDocSnapshot.id,
-                    ...peladaDocData
-                  });
-                  
-                  // Manter para compatibilidade com o código existente
-                  setPeladaId(peladaDocSnapshot.id);
-                  setPeladaCodigo(peladaDocData.codigo || '');
-                  setIsOwner(peladaDocData.ownerId === user.uid);
-                  
-                  // Buscar os times da pelada
-                  const unsubscribe = buscarTimes(peladaDocSnapshot.id);
-                  
-                  // Verificar times existentes e adicionar ao ranking se necessário
-                  await verificarTimesSemRanking(peladaDocSnapshot.id, peladaDocData);
-                  
-                  // Limpar a inscrição quando o componente for desmontado
-                  return () => unsubscribe();
-                }
-              }
-            } catch (error) {
-              console.error('Erro ao carregar pelada por ID:', error);
-            }
-          }
-          
-          // Se não encontrar nenhuma pelada, mostra uma mensagem adequada
-          setNotification('Você ainda não participa de nenhuma pelada. Para criar uma, acesse a página de peladas.');
-          setLoading(false);
         }
       } catch (error) {
         console.error('Erro ao carregar pelada:', error);
@@ -607,301 +559,290 @@ export default function TimeSelecionado() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="w-full bg-black text-white p-4">
-        <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <Link href="/" className="text-2xl font-bold">VemX1</Link>
-          {temAssinaturaAtiva && (
-            <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white">
-              Cancelar Assinatura
-            </button>
-          )}
-        </div>
-      </div>
-      
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Time Selecionado</h1>
-        
-        <div className="bg-white border-b border-gray-200 mb-6">
-          <div className="container mx-auto">
-            <div className="flex space-x-8 border-b">
-              {peladaId && (
-                <Link href={`/pelada/${peladaId}`} className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
-                  PELADA
-                </Link>
-              )}
+      <div className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4">
+          <h2 className="text-2xl font-semibold py-6">Time Selecionado</h2>
+          
+          <div className="flex space-x-8 border-b">
+            <Link href={peladaId ? `/pelada/${peladaId}` : "/dashboard"}>
+              <button className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
+                PELADA
+              </button>
+            </Link>
+            <Link href="/time">
               <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
                 TIME
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
               </button>
-            </div>
+            </Link>
           </div>
         </div>
+      </div>
+      
+      {notification && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-md z-50 flex items-center">
+          <span>{notification}</span>
+          <button 
+            onClick={() => setNotification('')}
+            className="text-white ml-3 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      
+      <div className="container mx-auto px-4 py-6">
+        {/* Adicionando o componente de cronômetro da temporada no topo */}
+        {peladaId && (
+          <div className="mb-6">
+            <SeasonTable 
+              peladaId={peladaId} 
+              temporada={peladaData?.temporada} 
+              isOwner={isOwner && temAssinaturaAtiva}
+              tipoTela="time"
+            />
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mb-6">
+          <div className="text-gray-600">Código da Pelada: {peladaCodigo}</div>
+        </div>
         
-        {notification && (
-          <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-md z-50 flex items-center">
-            <span>{notification}</span>
+        {isOwner && (
+          <div className="relative group">
             <button 
-              onClick={() => setNotification('')}
-              className="text-white ml-3 font-bold"
+              className={`w-full ${temAssinaturaAtiva ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-400 cursor-not-allowed'} text-white py-3 px-4 rounded-md flex items-center justify-center space-x-2 mb-8`}
+              onClick={temAssinaturaAtiva ? handleAddTeam : () => toast.error('Assine um plano para criar times')}
+              disabled={!temAssinaturaAtiva}
             >
-              ✕
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              <span>Novo Time</span>
             </button>
+            {!temAssinaturaAtiva && !verificandoAssinatura && (
+              <div className="hidden group-hover:block absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-600 text-white p-2 rounded shadow-lg text-xs z-10 w-48 text-center">
+                Assine um plano para desbloquear
+              </div>
+            )}
           </div>
         )}
         
-        <div className="container mx-auto px-4 py-6">
-          {/* Adicionando o componente de cronômetro da temporada no topo */}
-          {peladaId && (
-            <div className="mb-6">
-              <SeasonTable 
-                peladaId={peladaId} 
-                temporada={peladaData?.temporada} 
-                isOwner={isOwner && temAssinaturaAtiva}
-                tipoTela="time"
-              />
-            </div>
-          )}
-
-          <div className="flex justify-between items-center mb-6">
-            <div className="text-gray-600">Código da Pelada: {peladaCodigo}</div>
+        {teams.length === 0 ? (
+          <div className="text-center py-10 text-gray-500">
+            <p>Nenhum time criado ainda.</p>
+            {isOwner && (
+              <p className="mt-2">Clique no botão acima para criar um novo time.</p>
+            )}
+            {!isOwner && (
+              <p className="mt-2">Aguarde o organizador da pelada criar os times.</p>
+            )}
           </div>
-          
-          {isOwner && (
-            <div className="relative group">
-              <button 
-                className={`w-full ${temAssinaturaAtiva ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-400 cursor-not-allowed'} text-white py-3 px-4 rounded-md flex items-center justify-center space-x-2 mb-8`}
-                onClick={temAssinaturaAtiva ? handleAddTeam : () => toast.error('Assine um plano para criar times')}
-                disabled={!temAssinaturaAtiva}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                <span>Novo Time</span>
-              </button>
-              {!temAssinaturaAtiva && !verificandoAssinatura && (
-                <div className="hidden group-hover:block absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-600 text-white p-2 rounded shadow-lg text-xs z-10 w-48 text-center">
-                  Assine um plano para desbloquear
-                </div>
-              )}
-            </div>
-          )}
-          
-          {teams.length === 0 ? (
-            <div className="text-center py-10 text-gray-500">
-              <p>Nenhum time criado ainda.</p>
-              {isOwner && (
-                <p className="mt-2">Clique no botão acima para criar um novo time.</p>
-              )}
-              {!isOwner && (
-                <p className="mt-2">Aguarde o organizador da pelada criar os times.</p>
-              )}
-            </div>
-          ) : (
-            teams.map((team) => (
-              <div 
-                key={team.id} 
-                className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 
-                  ${timesSelecionados.some(t => t.id === team.id) 
-                    ? 'border-4 border-blue-500 transform scale-[1.02]' 
-                    : 'border border-gray-200'}`}
-              >
-                <div className="flex justify-between items-center p-6 bg-gray-50 relative">
-                  <h3 className="text-xl font-semibold">{team.name}</h3>
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                    {team.jogadores.length} jogadores
-                  </span>
-                  {isOwner && team.jogadores.length === 0 && (
-                    <button 
-                      onClick={() => handleRemoveTeam(team.id)}
-                      className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-600 z-10"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-                
-                <div className="p-6 flex justify-between items-center border-t border-gray-200">
-                  {isUserInTeam(team.id) ? (
-                    <button 
-                      className="bg-orange-500 text-white py-2 px-4 rounded hover:bg-orange-600"
-                      onClick={() => handleLeaveTeam(team.id)}
-                    >
-                      Sair do {team.name}
-                    </button>
-                  ) : (
-                    <button 
-                      className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-                      onClick={() => handleJoinTeam(team.id, team.name)}
-                    >
-                      Participar do {team.name}
-                    </button>
-                  )}
+        ) : (
+          teams.map((team) => (
+            <div 
+              key={team.id} 
+              className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 
+                ${timesSelecionados.some(t => t.id === team.id) 
+                  ? 'border-4 border-blue-500 transform scale-[1.02]' 
+                  : 'border border-gray-200'}`}
+            >
+              <div className="flex justify-between items-center p-6 bg-gray-50 relative">
+                <h3 className="text-xl font-semibold">{team.name}</h3>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                  {team.jogadores.length} jogadores
+                </span>
+                {isOwner && team.jogadores.length === 0 && (
                   <button 
-                    className={`py-2 px-4 rounded transition-colors ${
-                      timesSelecionados.some(t => t.id === team.id)
-                        ? 'bg-green-500 hover:bg-green-600 text-white'
-                        : 'bg-red-500 hover:bg-red-600 text-white'
-                    }`}
-                    onClick={() => handleSelecionarAdversario(team)}
+                    onClick={() => handleRemoveTeam(team.id)}
+                    className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-600 z-10"
                   >
-                    {timesSelecionados.some(t => t.id === team.id) 
-                      ? 'Selecionado ✓' 
-                      : 'Selecionar Time'}
+                    ✕
                   </button>
-                </div>
-                
-                {team.jogadores.length > 0 ? (
-                  <div className="bg-blue-50 p-6">
-                    {team.jogadores.map((jogador) => (
-                      <div 
-                        key={jogador.id} 
-                        className="flex items-center mb-2 cursor-pointer hover:bg-blue-100 p-2 rounded-md transition-colors"
-                        onClick={() => handleAbrirCartaJogador(jogador, team.id)}
-                      >
-                        <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mr-3">
-                          {jogador.nome.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="text-gray-700">
-                          {jogador.nome} {jogador.id === user?.uid && '(Você)'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center text-gray-600">
-                    <h3 className="text-lg font-medium mb-2">Aguardando jogadores...</h3>
-                    <p className="text-sm text-gray-500">
-                      Clique em &quot;Participar do {team.name}&quot; para entrar neste time
-                    </p>
-                  </div>
                 )}
               </div>
-            ))
-          )}
-          
-          <div className="flex-1 mt-auto">
-            <button 
-              onClick={handleIniciarPartida}
-              disabled={timesSelecionados.length !== 2 || !temAssinaturaAtiva}
-              className={`py-3 px-4 rounded-md flex items-center justify-center mb-4 mt-auto transition-all duration-300 ${
-                timesSelecionados.length === 2 && temAssinaturaAtiva
-                  ? 'bg-green-500 hover:bg-green-600 text-white'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-              }`}
-              style={{ position: 'fixed', bottom: '20px', right: '20px', width: 'calc(100% - 40px)', maxWidth: '200px' }}
-            >
-              {timesSelecionados.length === 2 
-                ? 'Iniciar Partida' 
-                : `Selecione mais ${2 - timesSelecionados.length} time(s)`}
-            </button>
-          </div>
-        </div>
-        
-        {!temAssinaturaAtiva && !verificandoAssinatura && (
-          <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
-            <h3 className="font-bold mb-2">Acesso Limitado</h3>
-            <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
-            <button 
-              onClick={() => setIsPlanosModalOpen(true)}
-              className="w-full bg-white text-blue-600 py-2 px-4 rounded hover:bg-blue-100 transition-colors font-medium"
-            >
-              Ver Planos
-            </button>
-          </div>
-        )}
-        
-        {/* Modal de Planos */}
-        <Dialog open={isPlanosModalOpen} onClose={() => setIsPlanosModalOpen(false)} className="relative z-50">
-          <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
-          
-          <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
-            <Dialog.Panel className="w-full max-w-md mx-auto bg-black text-white rounded-2xl shadow-xl overflow-hidden">
-              <div className="p-4 sm:p-6 text-center">
-                <Dialog.Title className="text-xl sm:text-2xl font-bold mb-4">
-                  Assine o VemX1
-                </Dialog.Title>
-                
-                <div className="mx-auto">
-                  {/* Plano Premium */}
-                  <div className="bg-black/40 rounded-xl p-4 sm:p-6 border-2 border-[#1d4ed8] relative">
-                    <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-1 text-sm rounded-t-xl font-bold">
-                      Plano VemX1
-                    </div>
-                    <div className="text-xl font-bold mb-2 mt-6">Plano Premium</div>
-                    <div className="text-3xl font-bold mb-4">
-                      R${PLANOS.PREMIUM.preco}
-                      <span className="text-sm text-gray-400">/mês</span>
-                    </div>
-                    <ul className="text-left text-sm space-y-2 mb-4">
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Jogadores ILIMITADOS
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Peladas ILIMITADAS
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Estatísticas avançadas
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Suporte prioritário
-                      </li>
-                      <li className="flex items-center">
-                        <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
-                        Cancele quando quiser
-                      </li>
-                    </ul>
-                    <button 
-                      onClick={() => handleCTA('premium')}
-                      disabled={loadingPlano === 'premium'}
-                      className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-4 py-3 w-full rounded-lg text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
-                    >
-                      {loadingPlano === 'premium' ? 'Processando...' : 'Assinar Agora'}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setIsPlanosModalOpen(false)}
-                  className="mt-6 px-4 py-1 text-sm text-gray-300 hover:text-white"
+              
+              <div className="p-6 flex justify-between items-center border-t border-gray-200">
+                {isUserInTeam(team.id) ? (
+                  <button 
+                    className="bg-orange-500 text-white py-2 px-4 rounded hover:bg-orange-600"
+                    onClick={() => handleLeaveTeam(team.id)}
+                  >
+                    Sair do {team.name}
+                  </button>
+                ) : (
+                  <button 
+                    className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+                    onClick={() => handleJoinTeam(team.id, team.name)}
+                  >
+                    Participar do {team.name}
+                  </button>
+                )}
+                <button 
+                  className={`py-2 px-4 rounded transition-colors ${
+                    timesSelecionados.some(t => t.id === team.id)
+                      ? 'bg-green-500 hover:bg-green-600 text-white'
+                      : 'bg-red-500 hover:bg-red-600 text-white'
+                  }`}
+                  onClick={() => handleSelecionarAdversario(team)}
                 >
-                  Fechar
+                  {timesSelecionados.some(t => t.id === team.id) 
+                    ? 'Selecionado ✓' 
+                    : 'Selecionar Time'}
                 </button>
               </div>
-            </Dialog.Panel>
-          </div>
-        </Dialog>
-        
-        {/* Componente de carta do jogador */}
-        {jogadorSelecionado && (
-          <PlayerCard 
-            jogador={{
-              ...jogadorSelecionado,
-              vitorias: jogadorStats?.vitorias || 0,
-              gols: jogadorStats?.gols || 0,
-              assistencias: jogadorStats?.assistencias || 0,
-              pontos: jogadorStats?.pontos || 0,
-              jogos: jogadorStats?.jogos || 0,
-              derrotas: jogadorStats?.derrotas || 0,
-              empates: jogadorStats?.empates || 0
-            }}
-            timeStats={{
-              ...jogadorTimeStats,
-              vitorias: jogadorTimeStats?.vitorias || 0,
-              derrotas: jogadorTimeStats?.derrotas || 0,
-              gols: jogadorTimeStats?.gols || 0,
-              assistencias: jogadorTimeStats?.assistencias || 0,
-              pontos: jogadorTimeStats?.pontos || 0,
-              jogos: jogadorTimeStats?.jogos || 0
-            }}
-            aberta={modalAberta}
-            onClose={handleFecharModal}
-          />
+              
+              {team.jogadores.length > 0 ? (
+                <div className="bg-blue-50 p-6">
+                  {team.jogadores.map((jogador) => (
+                    <div 
+                      key={jogador.id} 
+                      className="flex items-center mb-2 cursor-pointer hover:bg-blue-100 p-2 rounded-md transition-colors"
+                      onClick={() => handleAbrirCartaJogador(jogador, team.id)}
+                    >
+                      <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mr-3">
+                        {jogador.nome.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="text-gray-700">
+                        {jogador.nome} {jogador.id === user?.uid && '(Você)'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-gray-600">
+                  <h3 className="text-lg font-medium mb-2">Aguardando jogadores...</h3>
+                  <p className="text-sm text-gray-500">
+                    Clique em &quot;Participar do {team.name}&quot; para entrar neste time
+                  </p>
+                </div>
+              )}
+            </div>
+          ))
         )}
+        
+        <div className="flex-1 mt-auto">
+          <button 
+            onClick={handleIniciarPartida}
+            disabled={timesSelecionados.length !== 2 || !temAssinaturaAtiva}
+            className={`py-3 px-4 rounded-md flex items-center justify-center mb-4 mt-auto transition-all duration-300 ${
+              timesSelecionados.length === 2 && temAssinaturaAtiva
+                ? 'bg-green-500 hover:bg-green-600 text-white'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+            style={{ position: 'fixed', bottom: '20px', right: '20px', width: 'calc(100% - 40px)', maxWidth: '200px' }}
+          >
+            {timesSelecionados.length === 2 
+              ? 'Iniciar Partida' 
+              : `Selecione mais ${2 - timesSelecionados.length} time(s)`}
+          </button>
+        </div>
       </div>
+      
+      {!temAssinaturaAtiva && !verificandoAssinatura && (
+        <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
+          <h3 className="font-bold mb-2">Acesso Limitado</h3>
+          <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
+          <button 
+            onClick={() => setIsPlanosModalOpen(true)}
+            className="w-full bg-white text-blue-600 py-2 px-4 rounded hover:bg-blue-100 transition-colors font-medium"
+          >
+            Ver Planos
+          </button>
+        </div>
+      )}
+      
+      {/* Modal de Planos */}
+      <Dialog open={isPlanosModalOpen} onClose={() => setIsPlanosModalOpen(false)} className="relative z-50">
+        <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
+        
+        <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
+          <Dialog.Panel className="w-full max-w-md mx-auto bg-black text-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="p-4 sm:p-6 text-center">
+              <Dialog.Title className="text-xl sm:text-2xl font-bold mb-4">
+                Assine o VemX1
+              </Dialog.Title>
+              
+              <div className="mx-auto">
+                {/* Plano Premium */}
+                <div className="bg-black/40 rounded-xl p-4 sm:p-6 border-2 border-[#1d4ed8] relative">
+                  <div className="absolute top-0 right-0 left-0 bg-[#1d4ed8] text-white py-1 text-sm rounded-t-xl font-bold">
+                    Plano VemX1
+                  </div>
+                  <div className="text-xl font-bold mb-2 mt-6">Plano Premium</div>
+                  <div className="text-3xl font-bold mb-4">
+                    R${PLANOS.PREMIUM.preco}
+                    <span className="text-sm text-gray-400">/mês</span>
+                  </div>
+                  <ul className="text-left text-sm space-y-2 mb-4">
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Jogadores ILIMITADOS
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Peladas ILIMITADAS
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Estatísticas avançadas
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Suporte prioritário
+                    </li>
+                    <li className="flex items-center">
+                      <span className="text-[#1d4ed8] mr-2 text-xl">✓</span>
+                      Cancele quando quiser
+                    </li>
+                  </ul>
+                  <button 
+                    onClick={() => handleCTA('premium')}
+                    disabled={loadingPlano === 'premium'}
+                    className="bg-[#1d4ed8] hover:bg-[#1d4ed8]/90 text-white px-4 py-3 w-full rounded-lg text-lg font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-[#1d4ed8]/20 disabled:opacity-70"
+                  >
+                    {loadingPlano === 'premium' ? 'Processando...' : 'Assinar Agora'}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsPlanosModalOpen(false)}
+                className="mt-6 px-4 py-1 text-sm text-gray-300 hover:text-white"
+              >
+                Fechar
+              </button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
+      
+      {/* Componente de carta do jogador */}
+      {jogadorSelecionado && (
+        <PlayerCard 
+          jogador={{
+            ...jogadorSelecionado,
+            vitorias: jogadorStats?.vitorias || 0,
+            gols: jogadorStats?.gols || 0,
+            assistencias: jogadorStats?.assistencias || 0,
+            pontos: jogadorStats?.pontos || 0,
+            jogos: jogadorStats?.jogos || 0,
+            derrotas: jogadorStats?.derrotas || 0,
+            empates: jogadorStats?.empates || 0
+          }}
+          timeStats={{
+            ...jogadorTimeStats,
+            vitorias: jogadorTimeStats?.vitorias || 0,
+            derrotas: jogadorTimeStats?.derrotas || 0,
+            gols: jogadorTimeStats?.gols || 0,
+            assistencias: jogadorTimeStats?.assistencias || 0,
+            pontos: jogadorTimeStats?.pontos || 0,
+            jogos: jogadorTimeStats?.jogos || 0
+          }}
+          aberta={modalAberta}
+          onClose={handleFecharModal}
+        />
+      )}
     </div>
   );
 } 
