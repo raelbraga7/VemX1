@@ -143,26 +143,32 @@ export default function Login() {
           if (googleUser) {
             console.log('Login com Google por redirecionamento bem-sucedido:', googleUser.uid);
             
-            // Verificar se o usuário existe no Firestore
-            const userDoc = await getUser(googleUser.uid);
-            
-            if (!userDoc) {
-              console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
+            try {
+              // Verificar se o usuário existe no Firestore
+              const userDoc = await getUser(googleUser.uid);
               
-              // Fazer logout
+              if (!userDoc) {
+                console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
+                
+                // Fazer logout
+                await auth.signOut();
+                
+                // Mostrar mensagem de erro em vez de redirecionar
+                setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+                return;
+              }
+              
+              // Se não tiver peladaId, redireciona para o dashboard
+              if (!peladaId) {
+                redirecionandoRef.current = true;
+                router.push('/dashboard');
+              }
+              // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
+            } catch (verificaErro) {
+              console.error('Erro ao verificar usuário no Firestore:', verificaErro);
               await auth.signOut();
-              
-              // Mostrar mensagem de erro em vez de redirecionar
               setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
-              return;
             }
-            
-            // Se não tiver peladaId, redireciona para o dashboard
-            if (!peladaId) {
-              redirecionandoRef.current = true;
-              router.push('/dashboard');
-            }
-            // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
           }
         }
       } catch (err) {
@@ -299,28 +305,34 @@ export default function Login() {
       if (googleUser) {
         console.log('Login com Google realizado com sucesso via popup:', googleUser.uid);
         
-        // Verificar se o usuário existe no Firestore
-        const userDoc = await getUser(googleUser.uid);
-        
-        if (!userDoc) {
-          console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
+        try {
+          // Verificar se o usuário existe no Firestore
+          const userDoc = await getUser(googleUser.uid);
           
-          // Fazer logout
+          if (!userDoc) {
+            console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
+            
+            // Fazer logout
+            await auth.signOut();
+            
+            // Mostrar mensagem de erro em vez de redirecionar
+            setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+            return;
+          }
+          
+          // Resetar tentativas após sucesso
+          tentativasDeLogin = 0;
+          
+          // Se não tiver peladaId, redireciona para o dashboard
+          if (!peladaId) {
+            router.push('/dashboard');
+          }
+          // Se tiver peladaId, o useEffect vai cuidar de processar o convite
+        } catch (verificaErro) {
+          console.error('Erro ao verificar usuário no Firestore:', verificaErro);
           await auth.signOut();
-          
-          // Mostrar mensagem de erro em vez de redirecionar
           setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
-          return;
         }
-        
-        // Resetar tentativas após sucesso
-        tentativasDeLogin = 0;
-        
-        // Se não tiver peladaId, redireciona para o dashboard
-        if (!peladaId) {
-          router.push('/dashboard');
-        }
-        // Se tiver peladaId, o useEffect vai cuidar de processar o convite
       } else {
         console.log('Redirecionando para autenticação do Google...');
         // Não fazemos nada aqui, pois haverá um redirecionamento
