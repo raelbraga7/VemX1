@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/firebase/config';
@@ -28,20 +28,37 @@ export default function Login() {
   const cadastroSucesso = searchParams?.get('cadastroSucesso') || null;
   const { acceptInvite } = useInvite();
   const { user, loading: userLoading } = useUser();
+  
+  // Referência para controlar se o convite já foi processado
+  const conviteProcessadoRef = useRef(false);
+  
+  // Controle de redirecionamento em andamento
+  const redirecionandoRef = useRef(false);
 
   // Efeito para processar o convite quando o usuário estiver disponível
   useEffect(() => {
     const processarConvite = async () => {
-      if (peladaId && user && !userLoading) {
+      // Verifica se há um peladaId, se o usuário está logado e se o convite ainda não foi processado
+      if (peladaId && user && !userLoading && !conviteProcessadoRef.current && !redirecionandoRef.current) {
         try {
+          // Marca como processado para evitar processamento duplicado
+          conviteProcessadoRef.current = true;
+          redirecionandoRef.current = true;
+          
           console.log('Processando convite após inicialização do contexto:', {
             peladaId,
             userId: user.uid
           });
+          
           await acceptInvite(peladaId);
+          
+          // Já houve redirecionamento no acceptInvite, não precisamos fazer nada mais
         } catch (err) {
           console.error('Erro ao processar convite:', err);
           setError('Erro ao aceitar o convite. Por favor, tente novamente.');
+          redirecionandoRef.current = false;
+          // Se falhou, permite tentar novamente
+          conviteProcessadoRef.current = false;
         }
       }
     };
@@ -51,7 +68,8 @@ export default function Login() {
 
   // Efeito para redirecionar se já estiver logado
   useEffect(() => {
-    if (user && !userLoading && !peladaId) {
+    if (user && !userLoading && !peladaId && !redirecionandoRef.current) {
+      redirecionandoRef.current = true;
       router.push('/dashboard');
     }
   }, [user, userLoading, router, peladaId]);
@@ -60,6 +78,11 @@ export default function Login() {
   useEffect(() => {
     const verificarRedirecionamentoGoogle = async () => {
       try {
+        // Verifica se já está em processo de redirecionamento
+        if (redirecionandoRef.current) {
+          return;
+        }
+        
         // Apenas tenta obter o resultado se o usuário não estiver logado
         if (!user && !userLoading) {
           console.log('Verificando se há resultado de redirecionamento do Google...');
@@ -71,6 +94,7 @@ export default function Login() {
             
             // Se não tiver peladaId, redireciona para o dashboard
             if (!peladaId) {
+              redirecionandoRef.current = true;
               router.push('/dashboard');
             }
             // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { db } from '@/firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { useUser } from '@/contexts/UserContext';
-import { auth } from '@/firebase/config';
 import { adicionarJogadorPelada } from '@/firebase/peladaService';
 import { FirebaseError } from 'firebase/app';
 
@@ -31,25 +30,22 @@ export function useInvite(): UseInviteReturn {
         throw new Error('Por favor, faça login para aceitar o convite');
       }
 
-      // Força a atualização do token de autenticação
-      try {
-        const currentToken = await auth.currentUser?.getIdToken(true);
-        if (!currentToken) {
-          throw new Error('Erro de autenticação. Por favor, tente novamente.');
-        }
-      } catch (authError: unknown) {
-        // Tratamento específico para erro de quota excedida
-        if (authError instanceof FirebaseError && authError.code === 'auth/quota-exceeded') {
-          console.warn('Limite de requisições do Firebase atingido. Utilizando token existente.');
-          // Continua com o token existente em vez de forçar uma atualização
-        } else {
-          throw authError;
-        }
-      }
-
-      // Verifica se a pelada existe
+      // Verificar se a pelada existe
       const peladaRef = doc(db, 'peladas', peladaId);
-      const peladaDoc = await getDoc(peladaRef);
+      let peladaDoc;
+      
+      try {
+        peladaDoc = await getDoc(peladaRef);
+      } catch (firebaseError) {
+        // Tratar erro de leitura do Firestore
+        console.error('Erro ao ler documento da pelada:', firebaseError);
+        if (firebaseError instanceof FirebaseError && 
+            (firebaseError.code === 'resource-exhausted' || firebaseError.code === 'quota-exceeded')) {
+          console.warn('Limite de requisições do Firebase atingido. Tente novamente mais tarde.');
+          throw new Error('Limite de acesso ao banco de dados atingido. Tente novamente mais tarde.');
+        }
+        throw firebaseError;
+      }
 
       if (!peladaDoc.exists()) {
         throw new Error('Pelada não encontrada');
@@ -70,10 +66,18 @@ export function useInvite(): UseInviteReturn {
         userName: user.displayName || user.email?.split('@')[0]
       });
 
-      // Usa a função adicionarJogadorPelada que já tem toda a lógica necessária
-      await adicionarJogadorPelada(peladaId, user.uid);
-
-      console.log('Usuário adicionado com sucesso à pelada');
+      try {
+        // Usa a função adicionarJogadorPelada que já tem toda a lógica necessária
+        await adicionarJogadorPelada(peladaId, user.uid);
+        console.log('Usuário adicionado com sucesso à pelada');
+      } catch (addError) {
+        console.error('Erro ao adicionar jogador:', addError);
+        if (addError instanceof FirebaseError && 
+            (addError.code === 'resource-exhausted' || addError.code === 'quota-exceeded')) {
+          throw new Error('Limite de acesso ao banco de dados atingido. Aguarde um pouco e tente novamente.');
+        }
+        throw addError;
+      }
 
       // Redireciona para a página da pelada
       router.push(`/pelada/${peladaId}`);
@@ -85,8 +89,12 @@ export function useInvite(): UseInviteReturn {
       
       if (err instanceof Error) {
         // Verifica se é um erro de Firebase
-        if (err instanceof FirebaseError && err.code === 'auth/quota-exceeded') {
-          errorMessage = 'Limite de requisições atingido. Tente novamente mais tarde.';
+        if (err instanceof FirebaseError) {
+          if (err.code === 'auth/quota-exceeded' || err.code === 'resource-exhausted') {
+            errorMessage = 'Limite de requisições atingido. Tente novamente mais tarde.';
+          } else {
+            errorMessage = `Erro: ${err.code}`;
+          }
         } else {
           errorMessage = err.message;
         }
