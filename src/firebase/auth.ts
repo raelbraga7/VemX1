@@ -1,7 +1,7 @@
 import { auth } from './config';
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, AuthError } from 'firebase/auth';
 
-// Remover os hacks e usar a abordagem recomendada pelo Firebase
+// Função melhorada para login com Google em qualquer dispositivo
 export const signInWithGoogle = async () => {
   try {
     const provider = new GoogleAuthProvider();
@@ -12,51 +12,77 @@ export const signInWithGoogle = async () => {
     
     // Definir parâmetros de login personalizados
     provider.setCustomParameters({
-      prompt: 'select_account' // Força seleção de conta mesmo se houver apenas uma
+      prompt: 'select_account', // Força seleção de conta mesmo se houver apenas uma
+      login_hint: '', // Limpar qualquer hint para evitar problemas
     });
     
     // Verificar se estamos em ambiente com suporte a popup
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     console.log('Ambiente detectado:', isMobile ? 'Mobile' : 'Desktop');
     
+    // Registrar informações importantes para debug
+    console.log('Auth Domain:', auth.config.authDomain);
+    console.log('URL atual:', window.location.href);
+    console.log('Hostname:', window.location.hostname);
+    
     if (isMobile) {
-      // Em dispositivos móveis, use redirecionamento
-      console.log('Tentando login com Google por redirecionamento (mobile)...');
       try {
-        console.log('Auth Domain:', auth.config.authDomain);
+        // Em dispositivos móveis, sempre use redirecionamento
+        console.log('Iniciando login com Google por redirecionamento (mobile)...');
         
-        // Verificar se estamos em localhost
-        const isLocalhost = window.location.hostname === 'localhost';
-        console.log('É localhost:', isLocalhost);
-        
-        // Se estiver em localhost, certifique-se de que a URL completa atual está autorizada no Firebase Console
-        if (isLocalhost) {
-          console.log('URL atual:', window.location.href);
-          console.log('Origem:', window.location.origin);
+        // Salvar o estado atual da navegação para recuperar após o redirecionamento
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('auth_redirect_initiated', 'true');
+          localStorage.setItem('auth_redirect_timestamp', Date.now().toString());
+          
+          // Salvar a URL atual para retornar após o login
+          const currentPath = window.location.pathname + window.location.search;
+          localStorage.setItem('auth_redirect_path', currentPath);
         }
         
+        // Iniciar o redirecionamento
         await signInWithRedirect(auth, provider);
-        console.log('Redirecionamento iniciado. Aguardando retorno...');
-        // A função continuará quando o usuário retornar após o redirecionamento
-        return null; // O resultado será obtido em outro lugar via getRedirectResult()
+        console.log('Redirecionamento iniciado');
+        return null; // O resultado será obtido via getRedirectResult()
       } catch (redirectError) {
-        console.error('Erro no redirecionamento para autenticação Google:', redirectError);
+        console.error('Erro no redirecionamento para Google:', redirectError);
+        
+        const authError = redirectError as AuthError;
+        if (authError.code === 'auth/unauthorized-domain') {
+          console.error('Domínio não autorizado no Firebase Console. Verifique as configurações do projeto.');
+          console.error('Domínio atual:', window.location.origin);
+        }
+        
         throw redirectError;
       }
     } else {
-      // Em desktop, use popup para melhor experiência
       try {
-        console.log('Tentando login com Google via popup (desktop)...');
+        // Em desktop, tentar popup primeiro
+        console.log('Iniciando login com Google via popup (desktop)...');
         const result = await signInWithPopup(auth, provider);
         console.log('Login com popup bem-sucedido');
         return result.user;
       } catch (popupError) {
         console.error('Erro no popup do Google:', popupError);
         
-        // Se o popup falhar, tente redirecionamento como fallback
-        console.log('Tentando método alternativo (redirecionamento)...');
-        await signInWithRedirect(auth, provider);
-        return null;
+        const authError = popupError as AuthError;
+        if (authError.code === 'auth/popup-blocked' || 
+            authError.code === 'auth/popup-closed-by-user') {
+          // Se o popup for bloqueado ou fechado, tente redirecionamento
+          console.log('Popup bloqueado ou fechado. Tentando redirecionamento como alternativa...');
+          
+          // Salvar estado para recuperação pós-redirecionamento
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('auth_redirect_initiated', 'true');
+            localStorage.setItem('auth_redirect_timestamp', Date.now().toString());
+            localStorage.setItem('auth_redirect_path', window.location.pathname + window.location.search);
+          }
+          
+          await signInWithRedirect(auth, provider);
+          return null;
+        }
+        
+        throw popupError;
       }
     }
   } catch (error) {
@@ -65,13 +91,41 @@ export const signInWithGoogle = async () => {
   }
 };
 
-// Função auxiliar para obter o resultado do redirecionamento
+// Função melhorada para obter o resultado do redirecionamento
 export const getGoogleRedirectResult = async () => {
   try {
     console.log('Verificando resultado do redirecionamento do Google...');
+    
+    // Verificar se viemos de um redirecionamento para auth
+    const wasRedirected = localStorage.getItem('auth_redirect_initiated') === 'true';
+    
+    if (wasRedirected) {
+      console.log('Detectado retorno de redirecionamento de autenticação');
+      // Limpar flag para evitar verificações repetidas
+      localStorage.removeItem('auth_redirect_initiated');
+      
+      const redirectTimestamp = parseInt(localStorage.getItem('auth_redirect_timestamp') || '0');
+      const timeElapsed = Date.now() - redirectTimestamp;
+      console.log(`Tempo desde o redirecionamento: ${timeElapsed}ms`);
+      
+      // Se passaram mais de 5 minutos, provavelmente é uma sessão antiga
+      if (timeElapsed > 300000) {
+        console.log('Redirecionamento antigo, ignorando');
+        localStorage.removeItem('auth_redirect_timestamp');
+        localStorage.removeItem('auth_redirect_path');
+        return null;
+      }
+    }
+    
     const result = await getRedirectResult(auth);
+    
     if (result) {
       console.log('Resultado do redirecionamento obtido com sucesso:', result.user.uid);
+      
+      // Limpar dados de redirecionamento
+      localStorage.removeItem('auth_redirect_timestamp');
+      localStorage.removeItem('auth_redirect_path');
+      
       return result.user;
     } else {
       console.log('Nenhum resultado de redirecionamento encontrado');
@@ -79,6 +133,14 @@ export const getGoogleRedirectResult = async () => {
     }
   } catch (error) {
     console.error('Erro ao processar resultado do redirecionamento:', error);
+    
+    const authError = error as AuthError;
+    if (authError.code === 'auth/unauthorized-domain') {
+      console.error('ERRO: O domínio atual não está autorizado no Firebase Console.');
+      console.error('Por favor, adicione este domínio nas configurações do Firebase Auth:');
+      console.error('Domínio atual:', window.location.origin);
+    }
+    
     throw error;
   }
 }; 
