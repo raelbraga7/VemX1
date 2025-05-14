@@ -17,6 +17,7 @@ import { usePathname } from 'next/navigation';
 import { getUserById } from '@/firebase/userService';
 import { Dialog } from '@headlessui/react';
 import { PLANOS } from '@/lib/planos';
+import { AssinaturaButton } from '@/components/AssinaturaButton';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -162,12 +163,7 @@ function Header() {
         
         {user && (
           <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setIsPlanosModalOpen(true)}
-              className="flex items-center px-3 py-1.5 rounded-md bg-[#1d4ed8] text-white text-sm font-medium hover:bg-[#1e40af] transition-colors"
-            >
-              Assinatura
-            </button>
+            <AssinaturaButton />
             <NotificationBell 
               count={unreadCount} 
               onClick={() => setIsNotificationsPanelOpen(true)} 
