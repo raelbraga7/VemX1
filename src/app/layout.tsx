@@ -32,6 +32,13 @@ function Header() {
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
   const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
   const unreadCount = notifications.filter(n => !n.read).length;
+  const pathname = usePathname();
+  
+  // Verificar se estamos em uma página de pelada específica
+  const isPeladaSpecificPage = pathname?.startsWith('/pelada/') && pathname.split('/').length > 2;
+  
+  // Por padrão, mostrar o botão (será controlado pelo componente com base no isOwner)
+  const showAssinaturaButton = !isPeladaSpecificPage;
 
   useEffect(() => {
     if (!user) return;
@@ -163,7 +170,7 @@ function Header() {
         
         {user && (
           <div className="flex items-center space-x-2">
-            <AssinaturaButton />
+            {showAssinaturaButton && <AssinaturaButton />}
             <NotificationBell 
               count={unreadCount} 
               onClick={() => setIsNotificationsPanelOpen(true)} 
