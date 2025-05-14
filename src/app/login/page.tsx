@@ -8,6 +8,7 @@ import { useInvite } from '@/hooks/useInvite';
 import { useUser } from '@/contexts/UserContext';
 import Link from 'next/link';
 import { signInWithGoogle, getGoogleRedirectResult } from '@/firebase/auth';
+import { getUser } from '@/firebase/userService';
 
 // Contador improvisado para evitar bloqueio por muitas tentativas
 let tentativasDeLogin = 0;
@@ -26,6 +27,7 @@ export default function Login() {
   const searchParams = useSearchParams();
   const peladaId = searchParams?.get('peladaId') || null;
   const cadastroSucesso = searchParams?.get('cadastroSucesso') || null;
+  const convidadoPor = searchParams?.get('convidadoPor') || null;
   const { acceptInvite } = useInvite();
   const { user, loading: userLoading } = useUser();
   
@@ -141,6 +143,26 @@ export default function Login() {
           if (googleUser) {
             console.log('Login com Google por redirecionamento bem-sucedido:', googleUser.uid);
             
+            // Verificar se o usuário existe no Firestore
+            const userDoc = await getUser(googleUser.uid);
+            
+            if (!userDoc) {
+              console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
+              
+              // Fazer logout
+              await auth.signOut();
+              
+              // Redirecionar para página de cadastro
+              if (peladaId) {
+                router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+              } else {
+                router.push('/cadastro');
+              }
+              
+              setError('Conta não encontrada. Por favor, complete seu cadastro.');
+              return;
+            }
+            
             // Se não tiver peladaId, redireciona para o dashboard
             if (!peladaId) {
               redirecionandoRef.current = true;
@@ -158,7 +180,7 @@ export default function Login() {
     };
     
     verificarRedirecionamentoGoogle();
-  }, [user, userLoading, router, peladaId]);
+  }, [user, userLoading, router, peladaId, convidadoPor]);
 
   // Contagem regressiva quando bloqueado
   useEffect(() => {
@@ -283,6 +305,26 @@ export default function Login() {
       if (googleUser) {
         console.log('Login com Google realizado com sucesso via popup:', googleUser.uid);
         
+        // Verificar se o usuário existe no Firestore
+        const userDoc = await getUser(googleUser.uid);
+        
+        if (!userDoc) {
+          console.log('Usuário autenticado com Google não encontrado no Firestore:', googleUser.uid);
+          
+          // Fazer logout
+          await auth.signOut();
+          
+          // Redirecionar para página de cadastro
+          if (peladaId) {
+            router.push(`/cadastro?peladaId=${peladaId}${convidadoPor ? `&convidadoPor=${convidadoPor}` : ''}`);
+          } else {
+            router.push('/cadastro');
+          }
+          
+          setError('Conta não encontrada. Por favor, complete seu cadastro.');
+          return;
+        }
+        
         // Resetar tentativas após sucesso
         tentativasDeLogin = 0;
         
@@ -310,6 +352,7 @@ export default function Login() {
       } else {
         setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
       }
+    } finally {
       setLoading(false);
     }
   };
