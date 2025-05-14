@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/UserContext';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { toast } from 'react-hot-toast';
 
 interface AssinaturaButtonProps {
   isOwner?: boolean;
 }
 
+/**
+ * Componente que exibe um botão de assinatura ou cancelamento de assinatura
+ * dependendo do status atual do usuário. 
+ * Utiliza o contexto do usuário para verificar o status da assinatura.
+ */
 export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
-  const { user } = useUser();
-  const [statusAssinatura, setStatusAssinatura] = useState<string | null>(null);
+  const { user, temAssinaturaAtiva } = useUser();
   const [loading, setLoading] = useState(true);
+  const [cancelando, setCancelando] = useState(false);
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
   
   useEffect(() => {
@@ -19,33 +23,51 @@ export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
       return;
     }
     
-    // Observer em tempo real para o documento do usuário
-    const unsubscribe = onSnapshot(doc(db, 'usuarios', user.uid), (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const userData = docSnapshot.data();
-        setStatusAssinatura(userData.statusAssinatura);
-      }
+    const timer = setTimeout(() => {
       setLoading(false);
-    }, (error) => {
-      console.error('Erro ao observar documento do usuário:', error);
-      setLoading(false);
-    });
+    }, 300);
     
-    return () => unsubscribe();
+    return () => clearTimeout(timer);
   }, [user]);
   
-  const handleAssinatura = () => {
-    if (statusAssinatura === 'ativa' || statusAssinatura === 'teste') {
-      // Redirecionar para o painel da Hotmart para cancelamento
-      window.open("https://app.hotmart.com", "_blank");
+  const handleAssinatura = async () => {
+    if (temAssinaturaAtiva) {
+      try {
+        setCancelando(true);
+        console.log(`Iniciando cancelamento para usuário: ${user?.uid}`);
+        
+        // Usar o caminho correto para a API
+        const apiUrl = '/api/usuario/cancelar-manual';
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId: user?.uid }),
+        });
+
+        const data = await response.json();
+        console.log('Resposta do servidor:', data);
+
+        if (response.ok) {
+          toast.success('Assinatura cancelada com sucesso!');
+        } else {
+          console.error('Erro na resposta:', data);
+          toast.error(`Erro ao cancelar assinatura: ${data.error || 'Tente novamente'}`);
+        }
+      } catch (error) {
+        console.error('Erro ao cancelar assinatura:', error);
+        toast.error('Falha na comunicação com o servidor. Verifique sua conexão.');
+      } finally {
+        setCancelando(false);
+      }
     } else {
-      // Abrir modal de assinatura 
       setIsPlanosModalOpen(true);
     }
   };
   
-  // Se não for o dono da pelada, não exibe o botão
-  if (!isOwner) {
+  if (!isOwner || !user) {
     return null;
   }
   
@@ -64,18 +86,20 @@ export function AssinaturaButton({ isOwner = true }: AssinaturaButtonProps) {
     <>
       <button 
         onClick={handleAssinatura}
+        disabled={cancelando}
         className={`px-4 py-2 rounded ${
-          statusAssinatura === 'ativa' || statusAssinatura === 'teste' 
-            ? 'bg-red-600' 
-            : 'bg-blue-600'
-        } text-white`}
+          temAssinaturaAtiva
+            ? 'bg-red-600 hover:bg-red-700' 
+            : 'bg-blue-600 hover:bg-blue-700'
+        } text-white disabled:opacity-70 transition-all`}
       >
-        {statusAssinatura === 'ativa' || statusAssinatura === 'teste' 
-          ? 'Cancelar Assinatura' 
-          : 'Assinatura'}
+        {cancelando 
+          ? 'Cancelando...' 
+          : temAssinaturaAtiva 
+            ? 'Cancelar Assinatura' 
+            : 'Assinatura'}
       </button>
       
-      {/* Modal de Planos */}
       {isPlanosModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
           <div className="w-full max-w-md bg-black text-white rounded-2xl shadow-xl overflow-hidden">
