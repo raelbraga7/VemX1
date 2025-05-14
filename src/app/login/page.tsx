@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/firebase/config';
@@ -29,32 +29,77 @@ export default function Login() {
   const { acceptInvite } = useInvite();
   const { user, loading: userLoading } = useUser();
   
-  // Referência para controlar se o convite já foi processado
+  // Referência para controlar se o convite já foi processado nesta sessão
   const conviteProcessadoRef = useRef(false);
   
   // Controle de redirecionamento em andamento
   const redirecionandoRef = useRef(false);
+  
+  // Verificar se um peladaId já foi processado usando localStorage
+  const peladaJaProcessada = useCallback((pid: string, uid: string) => {
+    if (typeof window === 'undefined') return false;
+    
+    const processadosKey = `convites_processados_${uid}`;
+    const processados = JSON.parse(localStorage.getItem(processadosKey) || '{}');
+    
+    return !!processados[pid];
+  }, []);
+  
+  // Marcar um peladaId como processado
+  const marcarPeladaProcessada = useCallback((pid: string, uid: string) => {
+    if (typeof window === 'undefined') return;
+    
+    const processadosKey = `convites_processados_${uid}`;
+    const processados = JSON.parse(localStorage.getItem(processadosKey) || '{}');
+    
+    processados[pid] = true;
+    localStorage.setItem(processadosKey, JSON.stringify(processados));
+  }, []);
 
   // Efeito para processar o convite quando o usuário estiver disponível
   useEffect(() => {
+    let isMounted = true;
+    
     const processarConvite = async () => {
-      // Verifica se há um peladaId, se o usuário está logado e se o convite ainda não foi processado
-      if (peladaId && user && !userLoading && !conviteProcessadoRef.current && !redirecionandoRef.current) {
-        try {
-          // Marca como processado para evitar processamento duplicado
-          conviteProcessadoRef.current = true;
-          redirecionandoRef.current = true;
-          
-          console.log('Processando convite após inicialização do contexto:', {
-            peladaId,
-            userId: user.uid
-          });
-          
-          await acceptInvite(peladaId);
-          
-          // Já houve redirecionamento no acceptInvite, não precisamos fazer nada mais
-        } catch (err) {
-          console.error('Erro ao processar convite:', err);
+      // Verifica se há um peladaId, se o usuário está logado e se não está em processo de redirecionamento
+      if (!peladaId || !user || userLoading || redirecionandoRef.current) {
+        return;
+      }
+      
+      // Verifica se o convite já foi processado em sessões anteriores
+      if (peladaJaProcessada(peladaId, user.uid)) {
+        console.log('Convite já foi processado anteriormente, redirecionando diretamente');
+        redirecionandoRef.current = true;
+        router.push(`/pelada/${peladaId}`);
+        return;
+      }
+      
+      // Verifica se o convite já foi processado nesta sessão
+      if (conviteProcessadoRef.current) {
+        return;
+      }
+      
+      // Marca como processado para evitar processamento duplicado
+      conviteProcessadoRef.current = true;
+      redirecionandoRef.current = true;
+      
+      try {
+        console.log('Processando convite após inicialização do contexto:', {
+          peladaId,
+          userId: user.uid
+        });
+        
+        await acceptInvite(peladaId);
+        
+        // Marcar o convite como processado no localStorage para persistir entre recarregamentos
+        if (isMounted) {
+          marcarPeladaProcessada(peladaId, user.uid);
+        }
+        
+        // Já houve redirecionamento no acceptInvite, não precisamos fazer nada mais
+      } catch (err) {
+        console.error('Erro ao processar convite:', err);
+        if (isMounted) {
           setError('Erro ao aceitar o convite. Por favor, tente novamente.');
           redirecionandoRef.current = false;
           // Se falhou, permite tentar novamente
@@ -64,7 +109,11 @@ export default function Login() {
     };
 
     processarConvite();
-  }, [peladaId, user, userLoading, acceptInvite]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [peladaId, user, userLoading, acceptInvite, router, peladaJaProcessada, marcarPeladaProcessada]);
 
   // Efeito para redirecionar se já estiver logado
   useEffect(() => {

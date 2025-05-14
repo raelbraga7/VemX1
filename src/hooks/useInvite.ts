@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
@@ -15,19 +15,45 @@ interface UseInviteReturn {
   generateInviteLink: (peladaId: string) => string;
 }
 
+// Cache de verificação de membros para evitar consultas repetidas
+const membroCache: Record<string, boolean> = {};
+
 export function useInvite(): UseInviteReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { user } = useUser();
+  
+  // Referência para controlar processamentos em andamento
+  const processingRef = useRef<Record<string, boolean>>({});
 
   const acceptInvite = async (peladaId: string) => {
+    // Identificação única do convite (combinação de usuário e pelada)
+    const conviteId = `${user?.uid || ''}_${peladaId}`;
+    
+    // Verifica se este convite já está sendo processado em outra chamada
+    if (processingRef.current[conviteId]) {
+      console.log('Esta combinação de usuário e pelada já está sendo processada, ignorando');
+      return;
+    }
+    
+    // Marca convite como em processamento
+    processingRef.current[conviteId] = true;
+    
     setLoading(true);
     setError(null);
 
     try {
       if (!user?.uid) {
         throw new Error('Por favor, faça login para aceitar o convite');
+      }
+      
+      // Verificar o cache para saber se o usuário já é membro
+      const cacheKey = `${user.uid}_${peladaId}`;
+      if (membroCache[cacheKey]) {
+        console.log('Cache: Usuário já está na pelada, redirecionando');
+        router.push(`/pelada/${peladaId}`);
+        return;
       }
 
       // Verificar se a pelada existe
@@ -56,6 +82,8 @@ export function useInvite(): UseInviteReturn {
       // Verifica se o usuário já é jogador
       if (peladaData.players?.includes(user.uid)) {
         console.log('Usuário já está na pelada, redirecionando para a página da pelada');
+        // Atualiza o cache
+        membroCache[cacheKey] = true;
         router.push(`/pelada/${peladaId}`);
         return;
       }
@@ -70,6 +98,9 @@ export function useInvite(): UseInviteReturn {
         // Usa a função adicionarJogadorPelada que já tem toda a lógica necessária
         await adicionarJogadorPelada(peladaId, user.uid);
         console.log('Usuário adicionado com sucesso à pelada');
+        
+        // Atualiza o cache após adicionar o usuário com sucesso
+        membroCache[cacheKey] = true;
       } catch (addError) {
         console.error('Erro ao adicionar jogador:', addError);
         if (addError instanceof FirebaseError && 
@@ -79,6 +110,9 @@ export function useInvite(): UseInviteReturn {
         throw addError;
       }
 
+      // Pequeno atraso para garantir que o Firestore propagou as alterações
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       // Redireciona para a página da pelada
       router.push(`/pelada/${peladaId}`);
     } catch (err) {
@@ -104,6 +138,8 @@ export function useInvite(): UseInviteReturn {
       throw err;
     } finally {
       setLoading(false);
+      // Remove marca de processamento
+      delete processingRef.current[conviteId];
     }
   };
 
