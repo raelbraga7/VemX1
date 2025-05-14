@@ -89,7 +89,7 @@ interface NotificationWithId extends Notification {
 }
 
 export default function Dashboard() {
-  const { user, loading, temAssinaturaAtiva, verificandoAssinatura } = useUser();
+  const { user, loading, temAssinaturaAtiva, verificandoAssinatura, setTemAssinaturaAtiva, setVerificandoAssinatura } = useUser();
   const [selectedPeladaId, setSelectedPeladaId] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -163,7 +163,7 @@ export default function Dashboard() {
         window.history.replaceState({path: url}, '', url);
       }
     }
-  }, [searchParams, user, toast]);
+  }, [searchParams, user, toast, setTemAssinaturaAtiva, setVerificandoAssinatura]);
 
   useEffect(() => {
     const carregarPeladaRecente = async () => {

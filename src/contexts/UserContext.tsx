@@ -18,6 +18,8 @@ interface UserContextType {
   loading: boolean;
   temAssinaturaAtiva: boolean;
   verificandoAssinatura: boolean;
+  setTemAssinaturaAtiva: (value: boolean) => void;
+  setVerificandoAssinatura: (value: boolean) => void;
 }
 
 const UserContext = createContext<UserContextType>({
@@ -26,6 +28,8 @@ const UserContext = createContext<UserContextType>({
   loading: true,
   temAssinaturaAtiva: false,
   verificandoAssinatura: true,
+  setTemAssinaturaAtiva: () => {},
+  setVerificandoAssinatura: () => {}
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -117,7 +121,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       userData, 
       loading,
       temAssinaturaAtiva,
-      verificandoAssinatura
+      verificandoAssinatura,
+      setTemAssinaturaAtiva,
+      setVerificandoAssinatura
     }}>
       {children}
     </UserContext.Provider>
