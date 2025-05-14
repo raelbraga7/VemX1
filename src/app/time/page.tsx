@@ -741,7 +741,7 @@ export default function TimeSelecionado() {
       </div>
       
       {!temAssinaturaAtiva && !verificandoAssinatura && mostrarBannerLimitado && (
-        <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs relative">
+        <div className="fixed top-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs relative z-50">
           <button 
             onClick={() => setMostrarBannerLimitado(false)}
             className="absolute top-2 right-2 text-white hover:text-gray-200 focus:outline-none"
