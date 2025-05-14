@@ -99,7 +99,7 @@ export default function Dashboard() {
   const [verificandoAssinatura, setVerificandoAssinatura] = useState(true);
   const [isPlanosModalOpen, setIsPlanosModalOpen] = useState(false);
   const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
-  const [mostrarBannerLimitado, setMostrarBannerLimitado] = useState(true);
+  const [bannerFechado, setBannerFechado] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -261,6 +261,19 @@ export default function Dashboard() {
       clearAllListeners();
     };
   }, [user]);
+
+  useEffect(() => {
+    // Verificar se o banner foi fechado anteriormente
+    if (typeof window !== 'undefined') {
+      const bannerStatus = localStorage.getItem('bannerFechado');
+      setBannerFechado(bannerStatus === 'true');
+    }
+  }, []);
+
+  const fecharBanner = () => {
+    localStorage.setItem('bannerFechado', 'true');
+    setBannerFechado(true);
+  };
 
   const handlePeladaCreated = async (peladaId: string) => {
     setSelectedPeladaId(peladaId);
@@ -682,18 +695,20 @@ export default function Dashboard() {
         onReject={handleReject}
       />
 
-      {!temAssinaturaAtiva && !verificandoAssinatura && mostrarBannerLimitado && (
-        <div className="fixed top-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs relative z-50">
-          <button 
-            onClick={() => setMostrarBannerLimitado(false)}
-            className="absolute top-2 right-2 text-white hover:text-gray-200 focus:outline-none"
-            aria-label="Fechar"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
-          <h3 className="font-bold mb-2">Acesso Limitado</h3>
+      {!temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && (
+        <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="font-bold">Acesso Limitado</h3>
+            <button 
+              onClick={fecharBanner}
+              className="text-white hover:text-gray-200 ml-2"
+              aria-label="Fechar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
           <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
           <button 
             onClick={() => setIsPlanosModalOpen(true)}
