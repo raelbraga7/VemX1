@@ -104,20 +104,7 @@ export default function PaginaPelada() {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Gerenciar Pelada</h1>
-          <div className="flex gap-4">
-            {peladaData?.ownerId === user?.uid && (
-              <button
-                onClick={() => setShowConfigModal(true)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Configurar Pelada
-              </button>
-            )}
-            {peladaData?.ownerId === user?.uid && (
-              <InviteButton peladaId={params?.id as string} />
-            )}
-            <LogoutButton />
-          </div>
+          <LogoutButton />
         </div>
         
         {/* Navegação PELADA/TIME */}
@@ -135,23 +122,50 @@ export default function PaginaPelada() {
           </div>
         </div>
         
-        {/* Season Table */}
-        {peladaData && (
-          <div className="mb-8">
-            <SeasonTable 
-              peladaId={params?.id as string}
-              temporada={peladaData.temporada}
-              isOwner={isOwner}
-            />
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Coluna da Esquerda */}
+          <div className="lg:col-span-1">
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-4">Ações</h2>
+              <div className="space-y-4">
+                {peladaData?.ownerId === user?.uid && (
+                  <>
+                    <button
+                      onClick={() => setShowConfigModal(true)}
+                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    >
+                      Configurar Pelada
+                    </button>
+                    <InviteButton peladaId={params?.id as string} />
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-        )}
+          
+          {/* Coluna da Direita */}
+          <div className="lg:col-span-3">
+            {/* Season Table */}
+            {peladaData && (
+              <div className="mb-8">
+                <SeasonTable 
+                  peladaId={params?.id as string}
+                  temporada={peladaData.temporada}
+                  isOwner={isOwner}
+                />
+              </div>
+            )}
 
-        {/* Ranking Table */}
-        <div className="bg-black rounded-lg shadow-lg overflow-hidden">
-          <h2 className="text-xl font-semibold mb-4">Ranking dos Jogadores</h2>
-          <RankingTable peladaId={params?.id as string} />
+            {/* Ranking Table */}
+            <div className="bg-black rounded-lg shadow-lg overflow-hidden">
+              <div className="p-4 sm:p-6">
+                <h2 className="text-xl font-semibold text-white mb-4">Ranking dos Jogadores</h2>
+                <RankingTable peladaId={params?.id as string} />
+              </div>
+            </div>
+          </div>
         </div>
-        
+
         {showModal && times.length > 0 && (
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
