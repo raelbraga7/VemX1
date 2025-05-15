@@ -118,10 +118,11 @@ fetch('/api/usuario/ativar-manual', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    userId: "[SEU_USER_ID]", // Substitua pelo ID do usuário
+    userId: "SEU_ID_AQUI", 
     modo: "ativa",
     plano: "premium",
-    criarUsuario: true
+    criarUsuario: true,
+    email: "seu-email@exemplo.com" // Opcional
   })
 })
 .then(response => response.json())
@@ -161,21 +162,23 @@ fetch('/api/usuario/ativar-manual', {
               responseEl.classList.add('error');
             }
             
-            // Atualizar o código para o console
-            document.getElementById('consoleCode').textContent = 
-\`fetch('/api/usuario/ativar-manual', {
+            // Atualizar o código
+            const codeElement = document.getElementById('consoleCode');
+            const codeTemplate = \`fetch('/api/usuario/ativar-manual', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    userId: "${userId}", 
-    modo: "${modo}",
-    plano: "${plano}",
-    criarUsuario: ${criarUsuario}${email ? `,
-    email: "${email}"` : ''}
+    userId: "\${userId}", 
+    modo: "\${modo}",
+    plano: "\${plano}",
+    criarUsuario: \${criarUsuario}\${email ? \`,
+    email: "\${email}"\` : ''}
   })
 })
 .then(response => response.json())
 .then(data => console.log('Resposta:', data));\`;
+            
+            codeElement.textContent = codeTemplate;
             
             if (data.success) {
               setTimeout(() => {
@@ -201,4 +204,4 @@ fetch('/api/usuario/ativar-manual', {
       'Content-Type': 'text/html; charset=utf-8',
     },
   });
-} 
+}
