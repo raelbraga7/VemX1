@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/firebase/config';
-import { doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '@/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,14 +17,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Atualizar o status da assinatura no Firestore
+    // Atualizar o status da assinatura no Firestore usando Admin SDK
     try {
-      const userRef = doc(db, 'usuarios', userId);
+      const userRef = db.collection('usuarios').doc(userId);
       
       // Verificar se o usuário existe
-      const userDoc = await getDoc(userRef);
+      const userDoc = await userRef.get();
       
-      if (!userDoc.exists()) {
+      if (!userDoc.exists) {
         console.log(`[API] Usuário ${userId} não encontrado`);
         
         // Se criarUsuario = true, cria o usuário primeiro
@@ -32,22 +32,19 @@ export async function POST(req: NextRequest) {
           console.log(`[API] Criando novo usuário para ${userId}`);
           
           // Criar documento de usuário
-          const dataExpiracao = new Date();
-          dataExpiracao.setDate(dataExpiracao.getDate() + 30); // 30 dias
-          
-          await setDoc(userRef, {
+          await userRef.set({
             uid: userId,
             email: email || `usuario-${userId.substring(0, 6)}@teste.com`,
             nome: email ? email.split('@')[0] : `Usuário ${userId.substring(0, 6)}`,
-            dataCadastro: new Date(),
+            dataCadastro: FieldValue.serverTimestamp(),
             statusAssinatura: modo,
             plano: plano,
             premium: true,
             assinaturaAtiva: true,
-            dataAssinatura: new Date(),
-            dataUltimaAtualizacao: new Date(),
+            dataAssinatura: FieldValue.serverTimestamp(),
+            dataUltimaAtualizacao: FieldValue.serverTimestamp(),
             provider: provider,
-            dataExpiracao: dataExpiracao
+            dataExpiracao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias
           });
           
           console.log(`[API] Usuário criado com sucesso!`);
@@ -70,24 +67,21 @@ export async function POST(req: NextRequest) {
       // Atualizar documento existente
       console.log(`[API] Ativando assinatura do usuário ${userId} (${provider})`);
       
-      const dataExpiracao = new Date();
-      dataExpiracao.setDate(dataExpiracao.getDate() + 30); // 30 dias
-      
-      await updateDoc(userRef, {
+      await userRef.update({
         statusAssinatura: modo,
         plano: plano,
         premium: true,
         assinaturaAtiva: true,
-        dataAssinatura: new Date(),
-        dataUltimaAtualizacao: new Date(),
+        dataAssinatura: FieldValue.serverTimestamp(),
+        dataUltimaAtualizacao: FieldValue.serverTimestamp(),
         provider: provider,
-        dataExpiracao: dataExpiracao
+        dataExpiracao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias
       });
       
       console.log(`[API] Status atualizado com sucesso!`);
       
       // Buscar dados atualizados para retornar na resposta
-      const updatedUserDoc = await getDoc(userRef);
+      const updatedUserDoc = await userRef.get();
       const userData = updatedUserDoc.data();
       
       return NextResponse.json({
