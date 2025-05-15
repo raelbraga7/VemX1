@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     let email = '';
     let status = '';
     let rawData = '';
+    let paymentType = ''; // Novo campo para armazenar o tipo de pagamento
     
     // Tentar extrair dados brutos para debug 
     try {
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
         // Extrair email de várias estruturas possíveis
         email = extractEmail(payload);
         status = extractStatus(payload);
+        paymentType = extractPaymentType(payload); // Extrair tipo de pagamento
+        
+        console.log('💳 Tipo de pagamento detectado:', paymentType);
       } catch (error) {
         console.error('❌ Erro ao processar JSON:', error);
         
@@ -46,6 +50,8 @@ export async function POST(request: Request) {
             const payload = JSON.parse(rawData);
             email = extractEmail(payload);
             status = extractStatus(payload);
+            paymentType = extractPaymentType(payload);
+            console.log('💳 Tipo de pagamento detectado (fallback):', paymentType);
           }
         } catch (innerError) {
           console.error('❌ Erro ao converter rawData para JSON:', innerError);
@@ -63,6 +69,11 @@ export async function POST(request: Request) {
                 
         status = formData.get('status')?.toString() || 
                  formData.get('purchase[status]')?.toString() || '';
+                 
+        paymentType = formData.get('payment[type]')?.toString() || 
+                     formData.get('data[purchase][payment][type]')?.toString() || '';
+                     
+        console.log('💳 Tipo de pagamento detectado (formData):', paymentType);
       } catch (error) {
         console.error('❌ Erro ao processar FormData:', error);
         
@@ -76,6 +87,11 @@ export async function POST(request: Request) {
                     
             status = params.get('status') || 
                      params.get('purchase[status]') || '';
+                     
+            paymentType = params.get('payment[type]') || 
+                         params.get('data[purchase][payment][type]') || '';
+                         
+            console.log('💳 Tipo de pagamento detectado (params):', paymentType);
           } catch (innerError) {
             console.error('❌ Erro ao processar rawData como form:', innerError);
           }
@@ -89,6 +105,8 @@ export async function POST(request: Request) {
           const payload = JSON.parse(rawData);
           email = extractEmail(payload);
           status = extractStatus(payload);
+          paymentType = extractPaymentType(payload);
+          console.log('💳 Tipo de pagamento detectado (contentType fallback):', paymentType);
         } catch {
           // Tentar como form data
           try {
@@ -99,6 +117,9 @@ export async function POST(request: Request) {
                     
             status = params.get('status') || 
                      params.get('purchase[status]') || '';
+                     
+            paymentType = params.get('payment[type]') || 
+                         params.get('data[purchase][payment][type]') || '';
           } catch (innerError) {
             console.error('❌ Erro ao processar rawData:', innerError);
           }
@@ -111,6 +132,16 @@ export async function POST(request: Request) {
       email = extractEmailFromRawData(rawData);
     }
     
+    // Verificar se é PIX pelo rawData (último recurso)
+    if (!paymentType && rawData) {
+      if (rawData.includes('"type":"PIX"') || 
+          rawData.includes('"type": "PIX"') || 
+          rawData.includes('payment[type]=PIX')) {
+        paymentType = 'PIX';
+        console.log('💳 PIX detectado via análise de texto');
+      }
+    }
+    
     // Salvar o payload bruto no Firestore para análise posterior
     try {
       await db.collection('webhook_logs').add({
@@ -120,14 +151,15 @@ export async function POST(request: Request) {
         headers: headersObj,
         rawData,
         extractedEmail: email,
-        extractedStatus: status
+        extractedStatus: status,
+        paymentType
       });
       console.log('✅ Log do webhook salvo no Firestore');
     } catch (error) {
       console.error('❌ Erro ao salvar log do webhook:', error);
     }
     
-    console.log('🔍 Dados extraídos:', { email, status });
+    console.log('🔍 Dados extraídos:', { email, status, paymentType });
 
     // Verificar se temos informações suficientes
     if (!email) {
@@ -148,12 +180,24 @@ export async function POST(request: Request) {
                        status?.toUpperCase() === 'APPROVED' ||
                        rawData.includes('APPROVED') ||
                        rawData.includes('approved');
+                       
+    // Verificações específicas para PIX
+    const isPix = paymentType === 'PIX' || 
+                 paymentType === 'pix' || 
+                 rawData.includes('"type":"PIX"') || 
+                 rawData.includes('payment[type]=PIX');
+                 
+    if (isPix) {
+      console.log('🔄 Pagamento via PIX detectado, forçando aprovação');
+      // Se é PIX e o status está presente mas não é um dos aprovados, forçamos aprovação
+      // porque o PIX é instantâneo e só notifica quando confirmado
+    }
 
-    if (!isApproved && status !== '') {
+    if (!isApproved && status !== '' && !isPix) {
       console.log(`⚠️ Status não é de aprovação: ${status}`);
       return NextResponse.json({ 
         message: 'Webhook recebido, mas status não é de aprovação.', 
-        received: { email, status } 
+        received: { email, status, paymentType } 
       }, { status: 200 }); // 200 para não retentar
     }
 
@@ -177,7 +221,8 @@ export async function POST(request: Request) {
           plano: 'premium',
           dataAssinatura: new Date(),
           dataUltimaAtualizacao: new Date(),
-          origem: 'webhook_hotmart'
+          origem: 'webhook_hotmart',
+          metodoPagamento: paymentType || 'desconhecido'
         });
         
         console.log(`✅ Novo usuário criado com ID: ${newUserRef.id}`);
@@ -205,7 +250,8 @@ export async function POST(request: Request) {
       statusAssinatura: 'ativa',
       plano: 'premium',
       dataAssinatura: new Date(),
-      dataUltimaAtualizacao: new Date()
+      dataUltimaAtualizacao: new Date(),
+      metodoPagamento: paymentType || 'desconhecido'
     });
 
     console.log(`✅ Acesso premium liberado para ${email} (${userId})`);
@@ -219,44 +265,61 @@ export async function POST(request: Request) {
 }
 
 // Função para extrair email de várias estruturas possíveis
-function extractEmail(payload: Record<string, any>): string {
+function extractEmail(payload: Record<string, unknown>): string {
   let email = '';
   
   // Extração direta
-  if (payload?.buyer?.email) email = payload.buyer.email;
-  else if (payload?.data?.email) email = payload.data.email;
-  else if (payload?.client?.email) email = payload.client.email;
-  else if (payload?.email) email = payload.email;
-  else if (payload?.customer?.email) email = payload.customer.email;
+  if (payload?.buyer && typeof payload.buyer === 'object' && payload.buyer !== null && 'email' in payload.buyer) 
+    email = String(payload.buyer.email);
+  else if (payload?.data && typeof payload.data === 'object' && payload.data !== null && 'email' in payload.data) 
+    email = String(payload.data.email);
+  else if (payload?.client && typeof payload.client === 'object' && payload.client !== null && 'email' in payload.client) 
+    email = String(payload.client.email);
+  else if (payload?.email && typeof payload.email === 'string') 
+    email = payload.email;
+  else if (payload?.customer && typeof payload.customer === 'object' && payload.customer !== null && 'email' in payload.customer) 
+    email = String(payload.customer.email);
   
   // Extração de subestrutura data 
-  if (!email && payload?.data) {
-    if (typeof payload.data === 'object') {
-      if (payload.data.buyer?.email) email = payload.data.buyer.email;
-      else if (payload.data.client?.email) email = payload.data.client.email;
-      else if (payload.data.customer?.email) email = payload.data.customer.email;
-    }
+  if (!email && payload?.data && typeof payload.data === 'object' && payload.data !== null) {
+    const data = payload.data as Record<string, unknown>;
+    if (data.buyer && typeof data.buyer === 'object' && data.buyer !== null && 'email' in data.buyer)
+      email = String(data.buyer.email);
+    else if (data.client && typeof data.client === 'object' && data.client !== null && 'email' in data.client)
+      email = String(data.client.email);
+    else if (data.customer && typeof data.customer === 'object' && data.customer !== null && 'email' in data.customer)
+      email = String(data.customer.email);
   }
   
   // Extração de subestrutura purchase
-  if (!email && payload?.purchase) {
-    if (typeof payload.purchase === 'object') {
-      if (payload.purchase.buyer?.email) email = payload.purchase.buyer.email;
-      else if (payload.purchase.customer?.email) email = payload.purchase.customer.email;
-    }
+  if (!email && payload?.purchase && typeof payload.purchase === 'object' && payload.purchase !== null) {
+    const purchase = payload.purchase as Record<string, unknown>;
+    if (purchase.buyer && typeof purchase.buyer === 'object' && purchase.buyer !== null && 'email' in purchase.buyer)
+      email = String(purchase.buyer.email);
+    else if (purchase.customer && typeof purchase.customer === 'object' && purchase.customer !== null && 'email' in purchase.customer)
+      email = String(purchase.customer.email);
   }
   
   return email || '';
 }
 
 // Função para extrair status de várias estruturas possíveis
-function extractStatus(payload: Record<string, any>): string {
+function extractStatus(payload: Record<string, unknown>): string {
   let status = '';
   
   // Extração direta
-  if (payload?.status) status = payload.status;
-  else if (payload?.purchase?.status) status = payload.purchase.status;
-  else if (payload?.data?.status) status = payload.data.status;
+  if (payload?.status && typeof payload.status === 'string') 
+    status = payload.status;
+  else if (payload?.purchase && typeof payload.purchase === 'object' && payload.purchase !== null) {
+    const purchase = payload.purchase as Record<string, unknown>;
+    if (purchase.status && typeof purchase.status === 'string')
+      status = purchase.status;
+  }
+  else if (payload?.data && typeof payload.data === 'object' && payload.data !== null) {
+    const data = payload.data as Record<string, unknown>;
+    if (data.status && typeof data.status === 'string')
+      status = data.status;
+  }
   
   // Verificar estruturas de eventos
   if (payload?.event === 'PURCHASE_APPROVED' || 
@@ -266,14 +329,65 @@ function extractStatus(payload: Record<string, any>): string {
   }
   
   // Extração de subestrutura data 
-  if (!status && payload?.data) {
-    if (typeof payload.data === 'object') {
-      if (payload.data.status) status = payload.data.status;
-      else if (payload.data.purchase?.status) status = payload.data.purchase.status;
+  if (!status && payload?.data && typeof payload.data === 'object' && payload.data !== null) {
+    const data = payload.data as Record<string, unknown>;
+    if (data.status && typeof data.status === 'string')
+      status = data.status;
+    else if (data.purchase && typeof data.purchase === 'object' && data.purchase !== null) {
+      const purchase = data.purchase as Record<string, unknown>;
+      if (purchase.status && typeof purchase.status === 'string')
+        status = purchase.status;
     }
   }
   
   return status || '';
+}
+
+// Função para extrair o tipo de pagamento
+function extractPaymentType(payload: Record<string, unknown>): string {
+  let paymentType = '';
+  
+  // Extração direta
+  if (payload?.payment && typeof payload.payment === 'object' && payload.payment !== null) {
+    const payment = payload.payment as Record<string, unknown>;
+    if (payment.type && typeof payment.type === 'string')
+      paymentType = payment.type;
+  }
+  else if (payload?.purchase && typeof payload.purchase === 'object' && payload.purchase !== null) {
+    const purchase = payload.purchase as Record<string, unknown>;
+    if (purchase.payment && typeof purchase.payment === 'object' && purchase.payment !== null) {
+      const payment = purchase.payment as Record<string, unknown>;
+      if (payment.type && typeof payment.type === 'string')
+        paymentType = payment.type;
+    }
+  }
+  
+  // Extração de subestrutura data 
+  if (!paymentType && payload?.data && typeof payload.data === 'object' && payload.data !== null) {
+    const data = payload.data as Record<string, unknown>;
+    if (data.payment && typeof data.payment === 'object' && data.payment !== null) {
+      const payment = data.payment as Record<string, unknown>;
+      if (payment.type && typeof payment.type === 'string')
+        paymentType = payment.type;
+    }
+    else if (data.purchase && typeof data.purchase === 'object' && data.purchase !== null) {
+      const purchase = data.purchase as Record<string, unknown>;
+      if (purchase.payment && typeof purchase.payment === 'object' && purchase.payment !== null) {
+        const payment = purchase.payment as Record<string, unknown>;
+        if (payment.type && typeof payment.type === 'string')
+          paymentType = payment.type;
+      }
+    }
+    
+    // Verificar estrutura específica do Hotmart
+    if (!paymentType && data.subscription && typeof data.subscription === 'object' && data.subscription !== null) {
+      const subscription = data.subscription as Record<string, unknown>;
+      if (subscription.plan)
+        paymentType = 'SUBSCRIPTION';
+    }
+  }
+  
+  return paymentType || '';
 }
 
 // Função para tentar extrair email de dados brutos usando regex
