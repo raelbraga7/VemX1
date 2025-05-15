@@ -1,5 +1,34 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+
+// Interfaces para tipos de dados
+interface UserData {
+  email: string;
+  nome: string;
+  dataCriacao: FieldValue;
+  premium: boolean;
+  assinaturaAtiva: boolean;
+  statusAssinatura: string;
+  plano: string;
+  dataAssinatura: FieldValue;
+  dataUltimaAtualizacao: FieldValue;
+  origem: string;
+  metodoPagamento: string;
+  authId?: string; // Opcional pois nem sempre estará presente
+}
+
+interface UserUpdateData {
+  premium: boolean;
+  assinaturaAtiva: boolean;
+  statusAssinatura: string;
+  plano: string;
+  dataAssinatura: FieldValue;
+  dataUltimaAtualizacao: FieldValue;
+  metodoPagamento: string;
+  authId?: string; // Opcional
+}
 
 export async function POST(request: Request) {
   try {
@@ -145,7 +174,7 @@ export async function POST(request: Request) {
     // Salvar o payload bruto no Firestore para análise posterior
     try {
       await db.collection('webhook_logs').add({
-        timestamp: new Date(),
+        timestamp: FieldValue.serverTimestamp(),
         endpoint: 'pagamento/aprovado',
         contentType,
         headers: headersObj,
@@ -201,35 +230,87 @@ export async function POST(request: Request) {
       }, { status: 200 }); // 200 para não retentar
     }
 
-    // Busca o usuário pelo email
+    // Verificar se existe usuário com este email no Auth
+    let existingUserId = null;
+    let needUserSync = false;
+
+    try {
+      // Tenta buscar pelo email no Firebase Auth
+      await getAuth().getUserByEmail(email)
+        .then(user => {
+          existingUserId = user.uid;
+          console.log(`✅ Usuário encontrado no Auth: ${existingUserId}`);
+          return user;
+        })
+        .catch(error => {
+          console.log(`⚠️ Usuário não encontrado no Auth: ${error.message}`);
+          needUserSync = true;
+          return null;
+        });
+    } catch (authError) {
+      console.error('❌ Erro ao verificar usuário no Auth:', authError);
+      needUserSync = true;
+    }
+
+    // Busca o usuário pelo email no Firestore
     const usuariosRef = db.collection('usuarios');
     const snapshot = await usuariosRef.where('email', '==', email).limit(1).get();
 
     if (snapshot.empty) {
-      console.log(`⚠️ Usuário com email ${email} não encontrado. Criando registro simplificado.`);
+      console.log(`⚠️ Usuário com email ${email} não encontrado no Firestore. Criando registro simplificado.`);
       
       // Criar um documento simples para o usuário
       try {
-        const newUserRef = usuariosRef.doc();
-        await newUserRef.set({
+        let userRef;
+        
+        // Se temos o ID do usuário do Auth, usar como ID do documento
+        if (existingUserId) {
+          userRef = usuariosRef.doc(existingUserId);
+        } else {
+          userRef = usuariosRef.doc(); // Gerar novo ID se não temos o ID do Auth
+        }
+
+        const userData: UserData = {
           email: email,
           nome: email.split('@')[0],
-          dataCriacao: new Date(),
+          dataCriacao: FieldValue.serverTimestamp(),
           premium: true,
           assinaturaAtiva: true,
           statusAssinatura: 'ativa',
           plano: 'premium',
-          dataAssinatura: new Date(),
-          dataUltimaAtualizacao: new Date(),
+          dataAssinatura: FieldValue.serverTimestamp(),
+          dataUltimaAtualizacao: FieldValue.serverTimestamp(),
           origem: 'webhook_hotmart',
           metodoPagamento: paymentType || 'desconhecido'
-        });
+        };
+
+        // Se tivermos um ID do Auth, incluir na criação do documento
+        if (existingUserId) {
+          userData['authId'] = existingUserId;
+        }
         
-        console.log(`✅ Novo usuário criado com ID: ${newUserRef.id}`);
+        await userRef.set(userData);
+        
+        const userId = userRef.id;
+        console.log(`✅ Novo usuário criado com ID: ${userId}`);
+
+        // Se o usuário existe no Auth mas não no Firestore, ou se existe no Firestore mas não no Auth
+        if (needUserSync && existingUserId) {
+          // Tentar atualizar o documento para incluir o authId
+          try {
+            await userRef.update({
+              authId: existingUserId
+            });
+            console.log(`✅ Documento atualizado com authId: ${existingUserId}`);
+          } catch (updateError) {
+            console.error('❌ Erro ao atualizar authId:', updateError);
+          }
+        }
+        
         return NextResponse.json({ 
           success: true, 
           message: 'Novo usuário criado com sucesso.',
-          userId: newUserRef.id
+          userId: userId
         });
       } catch (error) {
         console.error('❌ Erro ao criar novo usuário:', error);
@@ -242,20 +323,52 @@ export async function POST(request: Request) {
 
     const doc = snapshot.docs[0];
     const userId = doc.id;
+    const userData = doc.data() as UserData;
 
-    // Atualiza o usuário
-    await usuariosRef.doc(userId).update({
+    console.log(`✅ Usuário encontrado no Firestore: ${userId}`);
+    console.log(`📊 Dados atuais:`, userData);
+
+    // Verificar se este documento tem relação com Auth
+    if (!userData.authId && existingUserId) {
+      console.log(`⚠️ Documento não tem authId. Adicionando relação com Auth ID: ${existingUserId}`);
+      needUserSync = true;
+    } else if (userData.authId && userData.authId !== existingUserId && existingUserId) {
+      console.log(`⚠️ authId diferente. Firestore: ${userData.authId}, Auth: ${existingUserId}`);
+      needUserSync = true;
+    }
+
+    // Preparar dados de atualização
+    const updateData: UserUpdateData = {
       premium: true,
       assinaturaAtiva: true,
       statusAssinatura: 'ativa',
       plano: 'premium',
-      dataAssinatura: new Date(),
-      dataUltimaAtualizacao: new Date(),
+      dataAssinatura: FieldValue.serverTimestamp(),
+      dataUltimaAtualizacao: FieldValue.serverTimestamp(),
       metodoPagamento: paymentType || 'desconhecido'
-    });
+    };
+
+    // Adicionar authId se necessário
+    if (needUserSync && existingUserId) {
+      updateData['authId'] = existingUserId;
+    }
+
+    // Atualiza o usuário
+    await usuariosRef.doc(userId).update(updateData);
 
     console.log(`✅ Acesso premium liberado para ${email} (${userId})`);
-    return NextResponse.json({ success: true, message: 'Usuário atualizado com sucesso.' });
+    
+    // Verificar se precisamos sincronizar com Auth
+    if (needUserSync && !existingUserId) {
+      console.log(`⚠️ Necessário verificar Auth mais tarde para este usuário`);
+      // Não podemos criar Auth aqui porque precisamos de senha
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Usuário atualizado com sucesso.',
+      userId: userId
+    });
 
   } catch (error) {
     console.error('❌ Erro no webhook:', error);
