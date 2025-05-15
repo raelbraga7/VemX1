@@ -165,6 +165,36 @@ export default function Dashboard() {
     }
   }, [searchParams, user, toast, setTemAssinaturaAtiva, setVerificandoAssinatura]);
 
+  // Verificar status de assinatura ao carregar a página
+  useEffect(() => {
+    const verificarStatus = async () => {
+      if (!user?.uid || verificandoAssinatura) return;
+      
+      try {
+        console.log('[Dashboard] Verificando status de assinatura ao carregar...');
+        setVerificandoAssinatura(true);
+        
+        // Verificar assinatura diretamente no Firestore
+        const assinaturaAtiva = await verificarAssinaturaAtiva(user.uid);
+        console.log(`[Dashboard] Status de assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
+        
+        // Atualizar estado
+        setTemAssinaturaAtiva(assinaturaAtiva);
+        
+        // Fechar o banner se assinatura estiver ativa
+        if (assinaturaAtiva) {
+          setBannerFechado(true);
+        }
+      } catch (error) {
+        console.error('[Dashboard] Erro ao verificar status de assinatura:', error);
+      } finally {
+        setVerificandoAssinatura(false);
+      }
+    };
+    
+    verificarStatus();
+  }, [user?.uid, setTemAssinaturaAtiva, setVerificandoAssinatura, verificandoAssinatura]);
+
   useEffect(() => {
     const carregarPeladaRecente = async () => {
       if (!user?.uid) return;
