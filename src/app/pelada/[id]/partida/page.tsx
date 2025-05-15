@@ -677,13 +677,17 @@ export default function Partida() {
     try {
       setLoading(true);
       
-      // Tenta finalizar a partida e atualizar o ranking, mas não bloqueia se falhar
-      try {
-        const rankingAtualizado = await handleFinalizarPartida();
-        console.log('Ranking atualizado com sucesso:', rankingAtualizado);
-      } catch (rankingError) {
-        console.error('Erro ao tentar atualizar o ranking:', rankingError);
-        // Continua mesmo com erro no ranking
+      // Apenas tenta finalizar a partida se ainda não foi finalizada
+      if (!partidaFinalizada) {
+        try {
+          const rankingAtualizado = await handleFinalizarPartida();
+          console.log('Ranking atualizado com sucesso:', rankingAtualizado);
+        } catch (rankingError) {
+          console.error('Erro ao tentar atualizar o ranking:', rankingError);
+          // Continua mesmo com erro no ranking
+        }
+      } else {
+        console.log('Partida já finalizada, ignorando atualização do ranking');
       }
 
       // Preparar para a próxima partida
