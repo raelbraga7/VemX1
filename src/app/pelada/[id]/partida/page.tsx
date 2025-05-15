@@ -396,12 +396,22 @@ export default function Partida() {
         if (!jogadorId || jogadorId === 'undefined') continue;
 
         const resultado = timeAVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
-        
-        // Obter contagem exata de gols e assistências
         const golsNum = Number(jogador.gols) || 0;
         const assistenciasNum = Number(jogador.assistencias) || 0;
 
-        // Obter ranking atual ou criar base se não existir
+        // IMPORTANTE: Verificar se os gols já foram registrados anteriormente
+        // Se já existir um registro no historico para esta partida, não adicione os gols novamente
+        const partidaJaFinalizada = peladaData.historico?.some((p: {
+          timeA: {
+            jogadores: Array<{id: string, gols?: number}>
+          }
+        }) => p.timeA.jogadores?.some(j => j.id === jogadorId && (j.gols || 0) > 0));
+
+        if (partidaJaFinalizada) {
+          console.log(`Jogador ${jogador.nome} (${jogadorId}) já teve seus gols registrados anteriormente. Ignorando.`);
+          continue;
+        }
+
         const rankingAtual = peladaData.ranking?.[jogadorId] || {
           jogos: 0,
           gols: 0,
@@ -413,32 +423,25 @@ export default function Partida() {
           nome: jogador.nome
         };
 
-        // Log para diagnóstico
-        console.log(`[DEBUG] Jogador: ${jogador.nome}, ID: ${jogadorId}`);
-        console.log(`[DEBUG] Gols na partida atual: ${golsNum}`);
-        console.log(`[DEBUG] Gols no ranking antes: ${rankingAtual.gols}`);
-        console.log(`[DEBUG] Gols no ranking depois: ${rankingAtual.gols + golsNum}`);
-
         // Calcula os pontos com a tabela de pontuação
         const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
         const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
         const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
-        const pontosPorGols = golsNum * 2; // +2 pontos na tabela por cada gol
-        const pontosPorAssistencias = assistenciasNum * 1; // +1 ponto na tabela por cada assistência
-        const pontosPorParticipacao = 0.5; // +0.5 ponto na tabela por participação
+        const pontosPorGols = golsNum * 2; // +2 por gol
+        const pontosPorAssistencias = assistenciasNum * 1; // +1 por assistência
+        const pontosPorParticipacao = 0.5; // +0.5 por participação
         
         const pontosTotais = Math.max(0, (rankingAtual.pontos || 0) + 
-                            pontosPorVitoria + 
-                            pontosPorDerrota + 
-                            pontosPorEmpate + 
-                            pontosPorGols + 
-                            pontosPorAssistencias +
-                            pontosPorParticipacao);
+                             pontosPorVitoria + 
+                             pontosPorDerrota + 
+                             pontosPorEmpate + 
+                             pontosPorGols + 
+                             pontosPorAssistencias +
+                             pontosPorParticipacao);
 
-        // Salvar no ranking final - Usar o golsNum EXATAMENTE como está no estado do jogador
         rankingFinal[jogadorId] = {
           jogos: (rankingAtual.jogos || 0) + 1,
-          gols: (rankingAtual.gols || 0) + golsNum, // Adiciona exatamente os gols desta partida
+          gols: (rankingAtual.gols || 0) + golsNum,
           assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
           vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
           derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
@@ -455,12 +458,22 @@ export default function Partida() {
         if (!jogadorId || jogadorId === 'undefined') continue;
 
         const resultado = timeBVenceu ? 'vitoria' : (empate ? 'empate' : 'derrota');
-        
-        // Obter contagem exata de gols e assistências
         const golsNum = Number(jogador.gols) || 0;
         const assistenciasNum = Number(jogador.assistencias) || 0;
 
-        // Obter ranking atual ou criar base se não existir
+        // IMPORTANTE: Verificar se os gols já foram registrados anteriormente
+        // Se já existir um registro no historico para esta partida, não adicione os gols novamente
+        const partidaJaFinalizada = peladaData.historico?.some((p: {
+          timeB: {
+            jogadores: Array<{id: string, gols?: number}>
+          }
+        }) => p.timeB.jogadores?.some(j => j.id === jogadorId && (j.gols || 0) > 0));
+
+        if (partidaJaFinalizada) {
+          console.log(`Jogador ${jogador.nome} (${jogadorId}) já teve seus gols registrados anteriormente. Ignorando.`);
+          continue;
+        }
+
         const rankingAtual = peladaData.ranking?.[jogadorId] || {
           jogos: 0,
           gols: 0,
@@ -472,32 +485,25 @@ export default function Partida() {
           nome: jogador.nome
         };
 
-        // Log para diagnóstico
-        console.log(`[DEBUG] Jogador: ${jogador.nome}, ID: ${jogadorId}`);
-        console.log(`[DEBUG] Gols na partida atual: ${golsNum}`);
-        console.log(`[DEBUG] Gols no ranking antes: ${rankingAtual.gols}`);
-        console.log(`[DEBUG] Gols no ranking depois: ${rankingAtual.gols + golsNum}`);
-
         // Calcula os pontos com a tabela de pontuação
         const pontosPorVitoria = resultado === 'vitoria' ? 7 : 0;
         const pontosPorDerrota = resultado === 'derrota' ? -6 : 0;
         const pontosPorEmpate = resultado === 'empate' ? 1 : 0;
-        const pontosPorGols = golsNum * 2; // +2 pontos na tabela por cada gol
-        const pontosPorAssistencias = assistenciasNum * 1; // +1 ponto na tabela por cada assistência
-        const pontosPorParticipacao = 0.5; // +0.5 ponto na tabela por participação
+        const pontosPorGols = golsNum * 2; // +2 por gol
+        const pontosPorAssistencias = assistenciasNum * 1; // +1 por assistência
+        const pontosPorParticipacao = 0.5; // +0.5 por participação
         
         const pontosTotais = Math.max(0, (rankingAtual.pontos || 0) + 
-                            pontosPorVitoria + 
-                            pontosPorDerrota + 
-                            pontosPorEmpate + 
-                            pontosPorGols + 
-                            pontosPorAssistencias +
-                            pontosPorParticipacao);
+                             pontosPorVitoria + 
+                             pontosPorDerrota + 
+                             pontosPorEmpate + 
+                             pontosPorGols + 
+                             pontosPorAssistencias +
+                             pontosPorParticipacao);
 
-        // Salvar no ranking final - Usar o golsNum EXATAMENTE como está no estado do jogador
         rankingFinal[jogadorId] = {
           jogos: (rankingAtual.jogos || 0) + 1,
-          gols: (rankingAtual.gols || 0) + golsNum, // Adiciona exatamente os gols desta partida
+          gols: (rankingAtual.gols || 0) + golsNum,
           assistencias: (rankingAtual.assistencias || 0) + assistenciasNum,
           vitorias: (rankingAtual.vitorias || 0) + (resultado === 'vitoria' ? 1 : 0),
           derrotas: (rankingAtual.derrotas || 0) + (resultado === 'derrota' ? 1 : 0),
@@ -507,9 +513,6 @@ export default function Partida() {
         };
       }
       
-      // Log final para diagnosticar o ranking completo
-      console.log('[DEBUG] Ranking final completo:', JSON.stringify(rankingFinal, null, 2));
-
       // Verifica se há alguma atualização para ser feita
       if (Object.keys(rankingFinal).length === 0) {
         console.error('Nenhuma atualização de ranking para enviar!');
@@ -518,6 +521,22 @@ export default function Partida() {
       }
 
       // Salva o resultado da partida e atualiza o ranking
+      // Importante: registrar um log detalhado para verificar os valores
+      console.log('Detalhes da atualização do ranking:', {
+        jogadoresTimeA: timeAValido.jogadores.map(j => ({
+          id: j.uid || j.id,
+          nome: j.nome,
+          gols: j.gols,
+          assistencias: j.assistencias
+        })),
+        jogadoresTimeB: timeBValido.jogadores.map(j => ({
+          id: j.uid || j.id,
+          nome: j.nome,
+          gols: j.gols,
+          assistencias: j.assistencias
+        }))
+      });
+      
       await updateDoc(peladaRef, {
         ranking: rankingFinal,
         historico: arrayUnion({
