@@ -38,12 +38,6 @@ export function HotmartButton({ plano, variant = 'default' }: HotmartButtonProps
         email: user.email || '',  // Pré-preencher o email
       });
       
-      // Criar URL de sucesso que redireciona para nossa API personalizada
-      const successUrl = encodeURIComponent(`${window.location.origin}/api/pagamento/sucesso?userId=${user.uid}&email=${user.email || ''}`);
-      
-      // Adicionar URL de sucesso para redirecionamento após pagamento
-      params.append('sck', successUrl);
-      
       // Redirecionar para a página de checkout do plano na Hotmart
       window.location.href = `${HOTMART_BASE_URL}?${params.toString()}`;
 
