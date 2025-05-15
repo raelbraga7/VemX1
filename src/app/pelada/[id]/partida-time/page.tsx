@@ -94,7 +94,6 @@ export default function PartidaTime() {
   const [rodando, setRodando] = useState(false);
   const [tempoAcabou, setTempoAcabou] = useState(false);
   const [openModal, setOpenModal] = useState(false);
-  const [rankingAtualizado, setRankingAtualizado] = useState(false);
   
   // Referência para a função de finalizar partida
   const finalizarPartidaRef = useRef<() => Promise<boolean>>(async () => false);
@@ -360,12 +359,6 @@ export default function PartidaTime() {
               const jogadorId = jogador.id || jogador.uid || '';
               if (!jogadorId) return;
               
-              // Obter o valor exato de gols
-              const golsNum = Number(jogador.gols) || 0;
-              const assistenciasNum = Number(jogador.assistencias) || 0;
-              
-              console.log(`[DEBUG] Jogador ${jogador.nome} do Time A marcou ${golsNum} gols nesta partida`);
-              
               // Buscar estatísticas existentes do jogador neste time
               const estatisticasTime = peladaData.estatisticasTime || {};
               const estatisticasDoTime = estatisticasTime[timeAId] || {};
@@ -379,25 +372,19 @@ export default function PartidaTime() {
                 empates: 0
               };
               
-              console.log(`[DEBUG] Estatísticas atuais de ${jogador.nome} no Time A: ${jogadorStats.gols} gols`);
-              
               // Calcular pontos com base na nova tabela:
               // Gol: +2, Assistência: +1, Vitória: +7, Derrota: -6, Empate: +1, Participação: +0.5
-              const pontosPorGols = golsNum * 2; // Pontuação, não quantidade
-              const pontosPorAssistencias = assistenciasNum * 1;
+              const pontosPorGols = (jogador.gols || 0) * 2;
+              const pontosPorAssistencias = (jogador.assistencias || 0) * 1;
               const pontosPorResultado = timeAVenceu ? 7 : (timeBVenceu ? -6 : 1); // Vitória, derrota ou empate
               const pontosPorParticipacao = 0.5; // Apenas por participar da partida
               
               const pontosDaPartida = pontosPorGols + pontosPorAssistencias + pontosPorResultado + pontosPorParticipacao;
               
-              // Quantidade exata de gols dessa partida
-              const golsAtualizados = (jogadorStats.gols || 0) + golsNum;
-              console.log(`[DEBUG] Atualizando gols para ${jogador.nome} no Time A: ${jogadorStats.gols} + ${golsNum} = ${golsAtualizados}`);
-              
               // Atualizar estatísticas do jogador
               const novasEstatisticas: JogadorEstatistica = {
-                gols: golsAtualizados,
-                assistencias: (jogadorStats.assistencias || 0) + assistenciasNum,
+                gols: (jogadorStats.gols || 0) + (jogador.gols || 0),
+                assistencias: (jogadorStats.assistencias || 0) + (jogador.assistencias || 0),
                 vitorias: (jogadorStats.vitorias || 0) + (timeAVenceu ? 1 : 0),
                 derrotas: (jogadorStats.derrotas || 0) + (timeBVenceu ? 1 : 0),
                 pontos: (jogadorStats.pontos || 0) + pontosDaPartida,
@@ -414,12 +401,6 @@ export default function PartidaTime() {
               const jogadorId = jogador.id || jogador.uid || '';
               if (!jogadorId) return;
               
-              // Obter o valor exato de gols
-              const golsNum = Number(jogador.gols) || 0;
-              const assistenciasNum = Number(jogador.assistencias) || 0;
-              
-              console.log(`[DEBUG] Jogador ${jogador.nome} do Time B marcou ${golsNum} gols nesta partida`);
-              
               // Buscar estatísticas existentes do jogador neste time
               const estatisticasTime = peladaData.estatisticasTime || {};
               const estatisticasDoTime = estatisticasTime[timeBId] || {};
@@ -433,25 +414,19 @@ export default function PartidaTime() {
                 empates: 0
               };
               
-              console.log(`[DEBUG] Estatísticas atuais de ${jogador.nome} no Time B: ${jogadorStats.gols} gols`);
-              
               // Calcular pontos com base na nova tabela:
               // Gol: +2, Assistência: +1, Vitória: +7, Derrota: -6, Empate: +1, Participação: +0.5
-              const pontosPorGols = golsNum * 2; // Pontuação, não quantidade
-              const pontosPorAssistencias = assistenciasNum * 1;
+              const pontosPorGols = (jogador.gols || 0) * 2;
+              const pontosPorAssistencias = (jogador.assistencias || 0) * 1;
               const pontosPorResultado = timeBVenceu ? 7 : (timeAVenceu ? -6 : 1); // Vitória, derrota ou empate
               const pontosPorParticipacao = 0.5; // Apenas por participar da partida
               
               const pontosDaPartida = pontosPorGols + pontosPorAssistencias + pontosPorResultado + pontosPorParticipacao;
               
-              // Quantidade exata de gols dessa partida
-              const golsAtualizados = (jogadorStats.gols || 0) + golsNum;
-              console.log(`[DEBUG] Atualizando gols para ${jogador.nome} no Time B: ${jogadorStats.gols} + ${golsNum} = ${golsAtualizados}`);
-              
               // Atualizar estatísticas do jogador
               const novasEstatisticas: JogadorEstatistica = {
-                gols: golsAtualizados,
-                assistencias: (jogadorStats.assistencias || 0) + assistenciasNum,
+                gols: (jogadorStats.gols || 0) + (jogador.gols || 0),
+                assistencias: (jogadorStats.assistencias || 0) + (jogador.assistencias || 0),
                 vitorias: (jogadorStats.vitorias || 0) + (timeBVenceu ? 1 : 0),
                 derrotas: (jogadorStats.derrotas || 0) + (timeAVenceu ? 1 : 0),
                 pontos: (jogadorStats.pontos || 0) + pontosDaPartida,
@@ -609,24 +584,15 @@ export default function PartidaTime() {
             toast('Tempo esgotado!');
           }
           
-          // Finalize a partida automaticamente apenas se ainda não foi atualizada
-          if (!rankingAtualizado) {
-            finalizarPartidaRef.current().then(success => {
-              if (success) {
-                setRankingAtualizado(true); // Marcar como já atualizado para evitar duplicação
-                // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
-                toast.success('Ranking atualizado com sucesso!');
-              } else {
-                // Falha ao finalizar automaticamente
-                toast.error('Erro ao atualizar ranking. Por favor, use o botão Finalizar Partida.');
-              }
-            }).catch(error => {
-              console.error('Erro ao finalizar automaticamente:', error);
-              toast.error('Falha ao atualizar ranking. Por favor, use o botão Finalizar Partida.');
-            });
-          } else {
-            console.log('Ranking já foi atualizado anteriormente. Ignorando atualização duplicada.');
-          }
+          // Finalize a partida automaticamente
+          finalizarPartidaRef.current().then(success => {
+            if (success) {
+              // Sucesso, redirecionamento já está sendo tratado em handleFinalizarPartida
+            } else {
+              // Falha ao finalizar automaticamente
+              toast.error('Erro ao atualizar ranking automaticamente. Use o botão Finalizar Partida.');
+            }
+          });
           
           return;
         }
@@ -643,7 +609,7 @@ export default function PartidaTime() {
     return () => {
       clearInterval(intervalId);
     };
-  }, [rodando, minutos, segundos, determinarVencedor, rankingAtualizado]);
+  }, [rodando, minutos, segundos, determinarVencedor]);
 
   if (loading) {
     return (
@@ -843,16 +809,9 @@ export default function PartidaTime() {
               variant="extended" 
               color="secondary" 
               onClick={async () => {
-                // Verifica se o ranking já foi atualizado para evitar duplicação
-                if (!rankingAtualizado) {
-                  const success = await handleFinalizarPartida();
-                  if (success) {
-                    setRankingAtualizado(true);
-                    toast.success('Partida finalizada e ranking atualizado!');
-                  }
-                } else {
-                  toast.success('Ranking já foi atualizado. Redirecionando...');
-                  router.push(`/time`);
+                const rankingAtualizado = await handleFinalizarPartida();
+                if (rankingAtualizado) {
+                  toast.success('Partida finalizada e ranking atualizado!');
                 }
               }}
               sx={{ px: 3 }}

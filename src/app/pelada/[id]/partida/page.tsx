@@ -679,15 +679,9 @@ export default function Partida() {
       
       // Apenas tenta finalizar a partida se ainda não foi finalizada
       if (!partidaFinalizada) {
-        console.log('Iniciando atualização de ranking através do botão Finalizar Partida');
         try {
           const rankingAtualizado = await handleFinalizarPartida();
-          console.log('Ranking atualizado pelo botão com sucesso:', rankingAtualizado);
-          
-          if (rankingAtualizado) {
-            setPartidaFinalizada(true);
-            toast.success('Ranking atualizado com sucesso!');
-          }
+          console.log('Ranking atualizado com sucesso:', rankingAtualizado);
         } catch (rankingError) {
           console.error('Erro ao tentar atualizar o ranking:', rankingError);
           // Continua mesmo com erro no ranking
@@ -783,53 +777,12 @@ export default function Partida() {
           finalizarPartidaRef.current().then(success => {
             console.log('Resultado da finalização automática da partida:', success);
             toast.success('Ranking atualizado automaticamente!');
-            
-            // Marca que a partida já foi finalizada e o ranking atualizado
+            // Marca a partida como finalizada ANTES de abrir o modal
             setPartidaFinalizada(true);
             
-            // Abre o modal automaticamente após finalizar a partida, sem passar pela função handleOpenModal
+            // Abre o modal automaticamente após finalizar a partida, mas sem atualizar o ranking novamente
             setTimeout(() => {
-              // Busca os times gerados da página anterior com fallbacks
-              const timesGeradosString = localStorage.getItem(`timesGerados_${params?.id}`) || 
-                                       localStorage.getItem(`timesPartida_${params?.id}`) ||
-                                       localStorage.getItem(`timesUltimos`);
-              
-              if (timesGeradosString) {
-                try {
-                  // Usa os times disponíveis
-                  const times = JSON.parse(timesGeradosString) as Time[];
-                  console.log('Times carregados para seleção:', times);
-                  
-                  // Reseta os gols e assistências dos times
-                  const timesResetados = times.map(time => ({
-                    ...time,
-                    gols: 0,
-                    jogadores: time.jogadores
-                      .filter(j => j.nome) // Garante que só jogadores com nome sejam incluídos
-                      .map(j => ({
-                        id: j.id || `jogador-${j.nome.replace(/\s+/g, '-').toLowerCase()}`,
-                        uid: j.uid || '',
-                        nome: j.nome,
-                        gols: 0,
-                        assistencias: 0
-                      }))
-                  }));
-
-                  setTimesSalvos(timesResetados);
-                  setTimesSelecionados(timesResetados.map(time => ({
-                    id: time.id,
-                    selecionado: false
-                  })));
-                } catch (parseError) {
-                  console.error('Erro ao processar times:', parseError);
-                  toast.error('Formato de times inválido');
-                }
-              } else {
-                console.warn('Nenhum time encontrado para seleção');
-                toast.error('Não foi possível carregar os times. Tente novamente.');
-              }
-              
-              // Abre o modal diretamente, sem usar handleOpenModal
+              // Ignora nova atualização do ranking, pois já foi atualizado
               setOpenModal(true);
               console.log('Modal aberto automaticamente após finalizar partida');
             }, 1500); // Pequeno delay para dar tempo das toast notifications
@@ -862,7 +815,7 @@ export default function Partida() {
         clearInterval(intervalId);
       }
     };
-  }, [rodando, minutos, segundos, determinarVencedor, params?.id]);
+  }, [rodando, minutos, segundos, determinarVencedor]);
 
   const handleCloseModal = () => {
     setOpenModal(false);
