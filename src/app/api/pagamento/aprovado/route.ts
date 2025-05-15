@@ -80,6 +80,8 @@ export async function POST(request: Request) {
         plano: 'premium', // Agora só temos o plano premium
         dataAssinatura: FieldValue.serverTimestamp(),
         dataUltimaAtualizacao: FieldValue.serverTimestamp(),
+        premium: true, // Campo necessário para liberar acesso premium
+        assinaturaAtiva: true, // Campo necessário para liberar acesso premium
         compraId,
         pagamentos: FieldValue.arrayUnion({
           id: compraId,
