@@ -777,11 +777,13 @@ export default function Partida() {
           finalizarPartidaRef.current().then(success => {
             console.log('Resultado da finalização automática da partida:', success);
             toast.success('Ranking atualizado automaticamente!');
+            // Marca a partida como finalizada ANTES de abrir o modal
             setPartidaFinalizada(true);
             
-            // Abre o modal automaticamente após finalizar a partida
+            // Abre o modal automaticamente após finalizar a partida, mas sem atualizar o ranking novamente
             setTimeout(() => {
-              handleOpenModal();
+              // Ignora nova atualização do ranking, pois já foi atualizado
+              setOpenModal(true);
               console.log('Modal aberto automaticamente após finalizar partida');
             }, 1500); // Pequeno delay para dar tempo das toast notifications
           }).catch(error => {
@@ -791,7 +793,7 @@ export default function Partida() {
             // Mesmo com erro, tenta abrir o modal
             setTimeout(() => {
               setPartidaFinalizada(true);
-              handleOpenModal();
+              setOpenModal(true);
               console.log('Modal aberto mesmo após erro na finalização');
             }, 1500);
           });
@@ -813,7 +815,7 @@ export default function Partida() {
         clearInterval(intervalId);
       }
     };
-  }, [rodando, minutos, segundos, determinarVencedor, handleOpenModal]);
+  }, [rodando, minutos, segundos, determinarVencedor]);
 
   const handleCloseModal = () => {
     setOpenModal(false);
