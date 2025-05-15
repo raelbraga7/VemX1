@@ -8,7 +8,6 @@ import { useInvite } from '@/hooks/useInvite';
 import { useUser } from '@/contexts/UserContext';
 import Link from 'next/link';
 import { signInWithGoogle, getGoogleRedirectResult } from '@/firebase/auth';
-import { getUser, createUser } from '@/firebase/userService';
 
 // Contador improvisado para evitar bloqueio por muitas tentativas
 let tentativasDeLogin = 0;
@@ -26,7 +25,6 @@ export default function Login() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const peladaId = searchParams?.get('peladaId') || null;
-  const convidadoPor = searchParams?.get('convidadoPor') || null;
   const cadastroSucesso = searchParams?.get('cadastroSucesso') || null;
   const { acceptInvite } = useInvite();
   const { user, loading: userLoading } = useUser();
@@ -125,12 +123,13 @@ export default function Login() {
     }
   }, [user, userLoading, router, peladaId]);
 
-  // Verificar se há resultado de redirecionamento do Google ao carregar
+  // Efeito para verificar se há resultado de redirecionamento do Google ao carregar
   useEffect(() => {
     const verificarRedirecionamentoGoogle = async () => {
       try {
         // Verifica se já está em processo de redirecionamento
         if (redirecionandoRef.current) {
+          console.log('Já estamos em processo de redirecionamento, ignorando verificação do Google');
           return;
         }
         
@@ -138,34 +137,24 @@ export default function Login() {
         if (!user && !userLoading) {
           console.log('Verificando se há resultado de redirecionamento do Google...');
           setLoading(true);
+          
+          // Verifica no localStorage se houve tentativa de login recente
+          const loginInitiated = localStorage.getItem('google_login_initiated') === 'true';
+          const loginTimestamp = parseInt(localStorage.getItem('google_login_timestamp') || '0', 10);
+          const timeElapsed = Date.now() - loginTimestamp;
+          
+          if (loginInitiated) {
+            console.log(`Detectada tentativa de login recente (${timeElapsed / 1000}s atrás)`);
+          }
+          
+          // Chamada para obter o resultado do redirecionamento
           const googleUser = await getGoogleRedirectResult();
           
           if (googleUser) {
             console.log('Login com Google por redirecionamento bem-sucedido:', googleUser.uid);
-            
-            // Verificar se o usuário existe no Firestore
-            const userDoc = await getUser(googleUser.uid);
-            if (!userDoc) {
-              console.log('Usuário autenticado por redirecionamento, mas não existe no Firestore. Criando perfil:', googleUser.uid);
-              
-              // Criar perfil do usuário automaticamente
-              try {
-                const displayName = googleUser.displayName || 'Usuário Google';
-                const userEmail = googleUser.email || '';
-                
-                await createUser(
-                  googleUser.uid,
-                  displayName,
-                  userEmail,
-                  convidadoPor || undefined
-                );
-                
-                console.log('Perfil criado automaticamente no Firestore após redirecionamento');
-              } catch (createError) {
-                console.error('Erro ao criar perfil automaticamente após redirecionamento:', createError);
-                // Continua mesmo se houver erro, para não bloquear o login
-              }
-            }
+            // Limpar flags de login
+            localStorage.removeItem('google_login_initiated');
+            localStorage.removeItem('google_login_timestamp');
             
             // Se não tiver peladaId, redireciona para o dashboard
             if (!peladaId) {
@@ -173,18 +162,26 @@ export default function Login() {
               router.push('/dashboard');
             }
             // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
+          } else if (loginInitiated && timeElapsed < 60000) {
+            // Se tentamos login há menos de 1 minuto e não temos resultado, 
+            // provavelmente o redirecionamento está em andamento ou falhou
+            console.log('Login iniciado recentemente, mas não há resultado. Possível falha ou redirecionamento em andamento.');
           }
         }
       } catch (err) {
         console.error('Erro ao processar redirecionamento do Google:', err);
         setError('Erro ao processar login com Google. Tente novamente.');
+        
+        // Limpar flags para evitar loops
+        localStorage.removeItem('google_login_initiated');
+        localStorage.removeItem('google_login_timestamp');
       } finally {
         setLoading(false);
       }
     };
     
     verificarRedirecionamentoGoogle();
-  }, [user, userLoading, router, peladaId, convidadoPor]);
+  }, [user, userLoading, router, peladaId]);
 
   // Contagem regressiva quando bloqueado
   useEffect(() => {
@@ -294,72 +291,47 @@ export default function Login() {
   };
 
   const handleGoogleLogin = async () => {
-    if (bloqueado) {
-      setError(`Aguarde ${Math.ceil(tempoRestante / 1000)} segundos antes de tentar novamente.`);
-      return;
-    }
-    
-    setLoading(true);
-    setError('');
-    
     try {
+      setError('');
+      setLoading(true);
+      
+      console.log('Iniciando login com Google...');
+      
+      // Registrar tentativa no localStorage
+      localStorage.setItem('google_login_initiated', 'true');
+      localStorage.setItem('google_login_timestamp', Date.now().toString());
+      
+      // Salvar URL atual incluindo o peladaId se houver
+      if (peladaId) {
+        localStorage.setItem('login_redirect_pelada_id', peladaId);
+      }
+      
       const googleUser = await signInWithGoogle();
-      // Em caso de redirecionamento, googleUser será null
-      // O resultado será processado no useEffect ao retornar
+      
       if (googleUser) {
-        console.log('Login com Google realizado com sucesso via popup:', googleUser.uid);
+        // Login bem sucedido via popup, limpar flags
+        localStorage.removeItem('google_login_initiated');
+        localStorage.removeItem('google_login_timestamp');
         
-        // Verificar se o usuário existe no Firestore
-        const userDoc = await getUser(googleUser.uid);
-        if (!userDoc) {
-          console.log('Usuário autenticado, mas não existe no Firestore. Criando perfil:', googleUser.uid);
-          
-          // Criar perfil do usuário automaticamente
-          try {
-            const displayName = googleUser.displayName || 'Usuário Google';
-            const userEmail = googleUser.email || '';
-            
-            await createUser(
-              googleUser.uid,
-              displayName,
-              userEmail,
-              convidadoPor || undefined
-            );
-            
-            console.log('Perfil criado automaticamente no Firestore');
-          } catch (createError) {
-            console.error('Erro ao criar perfil automaticamente:', createError);
-            // Continua mesmo se houver erro, para não bloquear o login
-          }
-        }
-        
-        // Resetar tentativas após sucesso
-        tentativasDeLogin = 0;
+        console.log('Login com Google bem sucedido via popup');
         
         // Se não tiver peladaId, redireciona para o dashboard
         if (!peladaId) {
           router.push('/dashboard');
         }
-        // Se tiver peladaId, o useEffect vai cuidar de processar o convite
+        // Se tiver peladaId, o outro useEffect vai cuidar de processar o convite
       } else {
-        console.log('Redirecionando para autenticação do Google...');
-        // Não fazemos nada aqui, pois haverá um redirecionamento
-        // O resultado será processado no useEffect quando o usuário retornar
+        // signInWithGoogle retornou null, o que significa que o login continuará
+        // via redirecionamento. Nada a fazer aqui, apenas aguardar o redirecionamento.
+        console.log('Login com Google iniciado via redirecionamento');
       }
-    } catch (err: unknown) {
+    } catch (err) {
       console.error('Erro no login com Google:', err);
+      setError('Erro ao fazer login com Google. Tente novamente.');
       
-      const googleError = err as { code?: string, message: string };
-      
-      // O usuário cancelou o login
-      if (googleError.code === 'auth/cancelled-popup-request' || 
-          googleError.code === 'auth/popup-closed-by-user') {
-        setError('Login cancelado. Tente novamente.');
-      } else if (googleError.code === 'auth/unauthorized-domain') {
-        setError('Este domínio não está autorizado para login com Google. Entre em contato com o suporte.');
-      } else {
-        setError('Erro ao fazer login com Google. Tente novamente ou use email e senha.');
-      }
+      // Limpar flags em caso de erro
+      localStorage.removeItem('google_login_initiated');
+      localStorage.removeItem('google_login_timestamp');
     } finally {
       setLoading(false);
     }
