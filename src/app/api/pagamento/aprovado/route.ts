@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { randomUUID } from 'crypto';
 
 // Interfaces para tipos de dados
 interface UserData {
@@ -29,12 +30,13 @@ interface UserUpdateData {
   dataUltimaAtualizacao: FieldValue;
   metodoPagamento: string;
   authId?: string; // Opcional
-  [key: string]: unknown; // Adicionando índice genérico para compatibilidade com o Firestore
+  [key: string]: any; // Adicionando índice genérico para compatibilidade com o Firestore
 }
 
 export async function POST(request: Request) {
   try {
-    console.log('🔔 Webhook do Hotmart recebido');
+    console.log('🔔 Webhook do Hotmart recebido - ' + new Date().toISOString());
+    console.log('🔑 Verificando transação recebida...');
     
     // Clonar a request para poder ler o corpo várias vezes se necessário
     const clonedRequest = request.clone();
@@ -51,11 +53,19 @@ export async function POST(request: Request) {
     let status = '';
     let rawData = '';
     let paymentType = ''; // Novo campo para armazenar o tipo de pagamento
+    let transactionId = ''; // ID da transação
     
     // Tentar extrair dados brutos para debug 
     try {
       rawData = await clonedRequest.text();
-      console.log('📄 Dados brutos recebidos:', rawData);
+      console.log('📄 Dados brutos recebidos (primeiros 500 caracteres):', rawData.substring(0, 500));
+      
+      // Tentar obter o ID da transação dos dados brutos
+      const transactionMatch = rawData.match(/transaction[=":]+([A-Z0-9]+)/i);
+      if (transactionMatch && transactionMatch[1]) {
+        transactionId = transactionMatch[1];
+        console.log('💰 ID da transação extraído dos dados brutos:', transactionId);
+      }
     } catch (error) {
       console.log('❌ Não foi possível obter dados brutos:', error);
     }
@@ -63,17 +73,39 @@ export async function POST(request: Request) {
     // Processar os dados conforme o formato recebido
     if (contentType.includes('application/json')) {
       try {
-        const payload = await request.json() as Record<string, unknown>;
-        console.log('📦 Payload JSON recebido:', JSON.stringify(payload, null, 2));
+        // Recriar o objeto JSON a partir dos dados brutos
+        const payload = JSON.parse(rawData);
+        console.log('📦 Payload JSON recebido (formato):', typeof payload);
         
         // Extrair email de várias estruturas possíveis
         email = extractEmail(payload);
         status = extractStatus(payload);
         paymentType = extractPaymentType(payload); // Extrair tipo de pagamento
         
+        // Tentar extrair ID da transação do payload
+        if (payload?.purchase?.transaction) {
+          transactionId = payload.purchase.transaction;
+        } else if (payload?.data?.purchase?.transaction) {
+          transactionId = payload.data.purchase.transaction;
+        }
+        
         console.log('💳 Tipo de pagamento detectado:', paymentType);
+        console.log('💰 ID da transação:', transactionId);
       } catch (error) {
         console.error('❌ Erro ao processar JSON:', error);
+        
+        // Tentar converter o rawData para JSON
+        try {
+          if (rawData) {
+            const payload = JSON.parse(rawData);
+            email = extractEmail(payload);
+            status = extractStatus(payload);
+            paymentType = extractPaymentType(payload);
+            console.log('💳 Tipo de pagamento detectado (fallback):', paymentType);
+          }
+        } catch (innerError) {
+          console.error('❌ Erro ao converter rawData para JSON:', innerError);
+        }
       }
     } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
       try {
@@ -162,7 +194,7 @@ export async function POST(request: Request) {
     
     // Salvar o payload bruto no Firestore para análise posterior
     try {
-      await db.collection('webhook_logs').add({
+      const logRef = await db.collection('webhook_logs').add({
         timestamp: FieldValue.serverTimestamp(),
         endpoint: 'pagamento/aprovado',
         contentType,
@@ -170,31 +202,25 @@ export async function POST(request: Request) {
         rawData,
         extractedEmail: email,
         extractedStatus: status,
-        paymentType
+        paymentType,
+        transactionId,
+        processed: false
       });
-      console.log('✅ Log do webhook salvo no Firestore');
+      console.log('✅ Log do webhook salvo no Firestore com ID:', logRef.id);
     } catch (error) {
       console.error('❌ Erro ao salvar log do webhook:', error);
     }
     
-    console.log('🔍 Dados extraídos:', { email, status, paymentType });
+    console.log('🔍 Dados extraídos:', { email, status, paymentType, transactionId });
 
     // Verificar se temos informações suficientes
     if (!email) {
       console.error('❌ Email não encontrado na requisição');
-      
-      // FALLBACK DE EMERGÊNCIA - usar sandbox@hotmart.com se não encontrarmos email em produção
-      // Remover isso depois que resolver o problema
-      if (process.env.NODE_ENV === 'production') {
-        email = 'sandbox@hotmart.com';
-        console.log('⚠️ USANDO EMAIL DE FALLBACK PARA PRODUÇÃO:', email);
-      } else {
-        return NextResponse.json({ 
-          message: 'Email não encontrado na requisição.',
-          headers: headersObj,
-          dataSnippet: rawData.substring(0, 200) + (rawData.length > 200 ? '...' : '')
-        }, { status: 200 }); // Mudado para 200 para não retentar
-      }
+      return NextResponse.json({ 
+        message: 'Email não encontrado na requisição.',
+        headers: headersObj,
+        dataSnippet: rawData.substring(0, 200) + (rawData.length > 200 ? '...' : '')
+      }, { status: 200 }); // Mudado para 200 para não retentar
     }
 
     // Normalizar status para approved (Hotmart pode usar APPROVED, approved, etc)
@@ -351,9 +377,38 @@ export async function POST(request: Request) {
     }
 
     // Atualiza o usuário
-    await usuariosRef.doc(userId).update(updateData as Record<string, any>);
-
-    console.log(`✅ Acesso premium liberado para ${email} (${userId})`);
+    console.log(`⚡ Atualizando dados do usuário ${userId} (email: ${email})`);
+    try {
+      await usuariosRef.doc(userId).update(updateData as Record<string, any>);
+      console.log(`✅ Acesso premium liberado para ${email} (${userId})`);
+      
+      // Atualizar o registro de log para marcar como processado
+      if (transactionId) {
+        try {
+          const logSnapshot = await db.collection('webhook_logs')
+            .where('transactionId', '==', transactionId)
+            .limit(1)
+            .get();
+          
+          if (!logSnapshot.empty) {
+            await logSnapshot.docs[0].ref.update({
+              processed: true,
+              usuarioId: userId,
+              processedAt: FieldValue.serverTimestamp()
+            });
+            console.log(`✅ Log de webhook marcado como processado`);
+          }
+        } catch (logError) {
+          console.error('❌ Erro ao atualizar log do webhook:', logError);
+        }
+      }
+    } catch (updateError) {
+      console.error(`❌ Erro ao atualizar usuário ${userId}:`, updateError);
+      return NextResponse.json({ 
+        error: 'Erro ao atualizar usuário',
+        details: String(updateError)
+      }, { status: 200 });
+    }
     
     // Verificar se precisamos sincronizar com Auth
     if (needUserSync && !existingUserId) {
@@ -378,30 +433,17 @@ export async function POST(request: Request) {
 function extractEmail(payload: Record<string, unknown>): string {
   let email = '';
   
-  console.log('🔍 Procurando email em:', JSON.stringify(payload, null, 2));
-  
   // Verificar primeiro nos custom_parameters ou extra_data (prioridade mais alta)
   if (payload?.data && typeof payload.data === 'object' && payload.data !== null) {
     const data = payload.data as Record<string, unknown>;
-    console.log('🔍 Estrutura data encontrada:', JSON.stringify(data, null, 2));
-    
-    // Verificar diretamente em data primeiro
-    if (data.email && typeof data.email === 'string') {
-      email = data.email;
-      console.log('📧 Email encontrado em data.email:', email);
-      return email;
-    }
     
     // Verificar se existe purchase com extra_data
     if (data.purchase && typeof data.purchase === 'object' && data.purchase !== null) {
       const purchase = data.purchase as Record<string, unknown>;
-      console.log('🔍 Estrutura purchase encontrada:', JSON.stringify(purchase, null, 2));
       
       // Hotmart envia o email como um parâmetro personalizado
       if (purchase.extra_data && typeof purchase.extra_data === 'object' && purchase.extra_data !== null) {
         const extraData = purchase.extra_data as Record<string, unknown>;
-        console.log('🔍 Estrutura extra_data encontrada:', JSON.stringify(extraData, null, 2));
-        
         if (extraData.email && typeof extraData.email === 'string') {
           email = extraData.email;
           console.log('📧 Email encontrado em extra_data:', email);
@@ -412,8 +454,6 @@ function extractEmail(payload: Record<string, unknown>): string {
       // Verificar em custom_parameters também
       if (purchase.custom_parameters && typeof purchase.custom_parameters === 'object' && purchase.custom_parameters !== null) {
         const customParams = purchase.custom_parameters as Record<string, unknown>;
-        console.log('🔍 Estrutura custom_parameters encontrada:', JSON.stringify(customParams, null, 2));
-        
         if (customParams.email && typeof customParams.email === 'string') {
           email = customParams.email;
           console.log('📧 Email encontrado em custom_parameters:', email);
