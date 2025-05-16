@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { randomUUID } from 'crypto';
 
 // Interfaces para tipos de dados
 interface UserData {
@@ -383,103 +384,66 @@ export async function POST(request: Request) {
 function extractEmail(payload: Record<string, unknown>): string {
   let email = '';
   
-  // NOVA LÓGICA: Verificar primeiro nos parâmetros extras/custom_parameters
+  // Verificar primeiro nos custom_parameters ou extra_data (prioridade mais alta)
   if (payload?.data && typeof payload.data === 'object' && payload.data !== null) {
     const data = payload.data as Record<string, unknown>;
     
-    // Extrair de extra_data (nova versão da API)
+    // Verificar se existe purchase com extra_data
     if (data.purchase && typeof data.purchase === 'object' && data.purchase !== null) {
       const purchase = data.purchase as Record<string, unknown>;
+      
+      // Hotmart envia o email como um parâmetro personalizado
       if (purchase.extra_data && typeof purchase.extra_data === 'object' && purchase.extra_data !== null) {
         const extraData = purchase.extra_data as Record<string, unknown>;
         if (extraData.email && typeof extraData.email === 'string') {
           email = extraData.email;
-          console.log('📧 Email encontrado em data.purchase.extra_data:', email);
-          return email; // Retorna imediatamente se encontrar aqui
+          console.log('📧 Email encontrado em extra_data:', email);
+          return email; // Retorna imediatamente se encontrou aqui
+        }
+      }
+      
+      // Verificar em custom_parameters também
+      if (purchase.custom_parameters && typeof purchase.custom_parameters === 'object' && purchase.custom_parameters !== null) {
+        const customParams = purchase.custom_parameters as Record<string, unknown>;
+        if (customParams.email && typeof customParams.email === 'string') {
+          email = customParams.email;
+          console.log('📧 Email encontrado em custom_parameters:', email);
+          return email; // Retorna imediatamente se encontrou aqui
         }
       }
     }
-    
-    // Extrair de custom_parameters (versão antiga da API)
-    if (data.custom_parameters && typeof data.custom_parameters === 'object' && data.custom_parameters !== null) {
-      const customParams = data.custom_parameters as Record<string, unknown>;
-      if (customParams.email && typeof customParams.email === 'string') {
-        email = customParams.email;
-        console.log('📧 Email encontrado em data.custom_parameters:', email);
-        return email; // Retorna imediatamente se encontrar aqui
-      }
-    }
   }
   
-  // Caminho "antigo" - verificar parâmetros extras na raiz do payload
-  if (payload?.extra_data && typeof payload.extra_data === 'object' && payload.extra_data !== null) {
-    const extraData = payload.extra_data as Record<string, unknown>;
-    if (extraData.email && typeof extraData.email === 'string') {
-      email = extraData.email;
-      console.log('📧 Email encontrado em extra_data:', email);
-      return email;
-    }
-  }
-  
-  if (payload?.custom_parameters && typeof payload.custom_parameters === 'object' && payload.custom_parameters !== null) {
-    const customParams = payload.custom_parameters as Record<string, unknown>;
-    if (customParams.email && typeof customParams.email === 'string') {
-      email = customParams.email;
-      console.log('📧 Email encontrado em custom_parameters:', email);
-      return email;
-    }
-  }
-  
-  // LÓGICA EXISTENTE: Extração direta
-  if (payload?.buyer && typeof payload.buyer === 'object' && payload.buyer !== null && 'email' in payload.buyer) {
+  // Extração direta (fallback para métodos anteriores)
+  if (payload?.buyer && typeof payload.buyer === 'object' && payload.buyer !== null && 'email' in payload.buyer) 
     email = String(payload.buyer.email);
-    console.log('📧 Email encontrado em buyer.email:', email);
-  }
-  else if (payload?.data && typeof payload.data === 'object' && payload.data !== null && 'email' in payload.data) {
+  else if (payload?.data && typeof payload.data === 'object' && payload.data !== null && 'email' in payload.data) 
     email = String(payload.data.email);
-    console.log('📧 Email encontrado em data.email:', email);
-  }
-  else if (payload?.client && typeof payload.client === 'object' && payload.client !== null && 'email' in payload.client) {
+  else if (payload?.client && typeof payload.client === 'object' && payload.client !== null && 'email' in payload.client) 
     email = String(payload.client.email);
-    console.log('📧 Email encontrado em client.email:', email);
-  }
-  else if (payload?.email && typeof payload.email === 'string') {
+  else if (payload?.email && typeof payload.email === 'string') 
     email = payload.email;
-    console.log('📧 Email encontrado em email:', email);
-  }
-  else if (payload?.customer && typeof payload.customer === 'object' && payload.customer !== null && 'email' in payload.customer) {
+  else if (payload?.customer && typeof payload.customer === 'object' && payload.customer !== null && 'email' in payload.customer) 
     email = String(payload.customer.email);
-    console.log('📧 Email encontrado em customer.email:', email);
-  }
   
   // Extração de subestrutura data 
   if (!email && payload?.data && typeof payload.data === 'object' && payload.data !== null) {
     const data = payload.data as Record<string, unknown>;
-    if (data.buyer && typeof data.buyer === 'object' && data.buyer !== null && 'email' in data.buyer) {
+    if (data.buyer && typeof data.buyer === 'object' && data.buyer !== null && 'email' in data.buyer)
       email = String(data.buyer.email);
-      console.log('📧 Email encontrado em data.buyer.email:', email);
-    }
-    else if (data.client && typeof data.client === 'object' && data.client !== null && 'email' in data.client) {
+    else if (data.client && typeof data.client === 'object' && data.client !== null && 'email' in data.client)
       email = String(data.client.email);
-      console.log('📧 Email encontrado em data.client.email:', email);
-    }
-    else if (data.customer && typeof data.customer === 'object' && data.customer !== null && 'email' in data.customer) {
+    else if (data.customer && typeof data.customer === 'object' && data.customer !== null && 'email' in data.customer)
       email = String(data.customer.email);
-      console.log('📧 Email encontrado em data.customer.email:', email);
-    }
   }
   
   // Extração de subestrutura purchase
   if (!email && payload?.purchase && typeof payload.purchase === 'object' && payload.purchase !== null) {
     const purchase = payload.purchase as Record<string, unknown>;
-    if (purchase.buyer && typeof purchase.buyer === 'object' && purchase.buyer !== null && 'email' in purchase.buyer) {
+    if (purchase.buyer && typeof purchase.buyer === 'object' && purchase.buyer !== null && 'email' in purchase.buyer)
       email = String(purchase.buyer.email);
-      console.log('📧 Email encontrado em purchase.buyer.email:', email);
-    }
-    else if (purchase.customer && typeof purchase.customer === 'object' && purchase.customer !== null && 'email' in purchase.customer) {
+    else if (purchase.customer && typeof purchase.customer === 'object' && purchase.customer !== null && 'email' in purchase.customer)
       email = String(purchase.customer.email);
-      console.log('📧 Email encontrado em purchase.customer.email:', email);
-    }
   }
   
   return email || '';
