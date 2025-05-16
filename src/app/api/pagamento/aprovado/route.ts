@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { randomUUID } from 'crypto';
 
 // Interfaces para tipos de dados
 interface UserData {
@@ -30,7 +29,7 @@ interface UserUpdateData {
   dataUltimaAtualizacao: FieldValue;
   metodoPagamento: string;
   authId?: string; // Opcional
-  [key: string]: any; // Adicionando índice genérico para compatibilidade com o Firestore
+  [key: string]: unknown; // Adicionando índice genérico para compatibilidade com o Firestore
 }
 
 export async function POST(request: Request) {
@@ -64,7 +63,7 @@ export async function POST(request: Request) {
     // Processar os dados conforme o formato recebido
     if (contentType.includes('application/json')) {
       try {
-        const payload = await request.json();
+        const payload = await request.json() as Record<string, unknown>;
         console.log('📦 Payload JSON recebido:', JSON.stringify(payload, null, 2));
         
         // Extrair email de várias estruturas possíveis
@@ -75,19 +74,6 @@ export async function POST(request: Request) {
         console.log('💳 Tipo de pagamento detectado:', paymentType);
       } catch (error) {
         console.error('❌ Erro ao processar JSON:', error);
-        
-        // Tentar converter o rawData para JSON
-        try {
-          if (rawData) {
-            const payload = JSON.parse(rawData);
-            email = extractEmail(payload);
-            status = extractStatus(payload);
-            paymentType = extractPaymentType(payload);
-            console.log('💳 Tipo de pagamento detectado (fallback):', paymentType);
-          }
-        } catch (innerError) {
-          console.error('❌ Erro ao converter rawData para JSON:', innerError);
-        }
       }
     } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
       try {
