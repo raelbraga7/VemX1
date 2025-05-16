@@ -34,9 +34,20 @@ interface UserUpdateData {
 }
 
 export async function POST(request: Request) {
+  // Adicionar cabeçalhos CORS para permitir requisições de qualquer origem
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  };
+
+  // Tratar requisições OPTIONS (preflight)
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers });
+  }
+
   try {
-    console.log('🔔 Webhook do Hotmart recebido - ' + new Date().toISOString());
-    console.log('🔑 Verificando transação recebida...');
+    console.log('🔔 Webhook do Hotmart recebido');
     
     // Clonar a request para poder ler o corpo várias vezes se necessário
     const clonedRequest = request.clone();
@@ -53,19 +64,12 @@ export async function POST(request: Request) {
     let status = '';
     let rawData = '';
     let paymentType = ''; // Novo campo para armazenar o tipo de pagamento
-    let transactionId = ''; // ID da transação
+    let transactionId = ''; // Código da transação
     
     // Tentar extrair dados brutos para debug 
     try {
       rawData = await clonedRequest.text();
-      console.log('📄 Dados brutos recebidos (primeiros 500 caracteres):', rawData.substring(0, 500));
-      
-      // Tentar obter o ID da transação dos dados brutos
-      const transactionMatch = rawData.match(/transaction[=":]+([A-Z0-9]+)/i);
-      if (transactionMatch && transactionMatch[1]) {
-        transactionId = transactionMatch[1];
-        console.log('💰 ID da transação extraído dos dados brutos:', transactionId);
-      }
+      console.log('📄 Dados brutos recebidos:', rawData);
     } catch (error) {
       console.log('❌ Não foi possível obter dados brutos:', error);
     }
@@ -73,24 +77,15 @@ export async function POST(request: Request) {
     // Processar os dados conforme o formato recebido
     if (contentType.includes('application/json')) {
       try {
-        // Recriar o objeto JSON a partir dos dados brutos
-        const payload = JSON.parse(rawData);
-        console.log('📦 Payload JSON recebido (formato):', typeof payload);
+        const payload = await request.json();
+        console.log('📦 Payload JSON recebido:', JSON.stringify(payload, null, 2));
         
         // Extrair email de várias estruturas possíveis
         email = extractEmail(payload);
         status = extractStatus(payload);
         paymentType = extractPaymentType(payload); // Extrair tipo de pagamento
         
-        // Tentar extrair ID da transação do payload
-        if (payload?.purchase?.transaction) {
-          transactionId = payload.purchase.transaction;
-        } else if (payload?.data?.purchase?.transaction) {
-          transactionId = payload.data.purchase.transaction;
-        }
-        
         console.log('💳 Tipo de pagamento detectado:', paymentType);
-        console.log('💰 ID da transação:', transactionId);
       } catch (error) {
         console.error('❌ Erro ao processar JSON:', error);
         
@@ -192,27 +187,6 @@ export async function POST(request: Request) {
       }
     }
     
-    // Salvar o payload bruto no Firestore para análise posterior
-    try {
-      const logRef = await db.collection('webhook_logs').add({
-        timestamp: FieldValue.serverTimestamp(),
-        endpoint: 'pagamento/aprovado',
-        contentType,
-        headers: headersObj,
-        rawData,
-        extractedEmail: email,
-        extractedStatus: status,
-        paymentType,
-        transactionId,
-        processed: false
-      });
-      console.log('✅ Log do webhook salvo no Firestore com ID:', logRef.id);
-    } catch (error) {
-      console.error('❌ Erro ao salvar log do webhook:', error);
-    }
-    
-    console.log('🔍 Dados extraídos:', { email, status, paymentType, transactionId });
-
     // Verificar se temos informações suficientes
     if (!email) {
       console.error('❌ Email não encontrado na requisição');
@@ -376,40 +350,49 @@ export async function POST(request: Request) {
       updateData['authId'] = existingUserId;
     }
 
+    // Adicionar transactionId se estiver disponível
+    if (transactionId) {
+      updateData['transactionId'] = transactionId;
+    }
+
     // Atualiza o usuário
-    console.log(`⚡ Atualizando dados do usuário ${userId} (email: ${email})`);
     try {
       await usuariosRef.doc(userId).update(updateData as Record<string, any>);
       console.log(`✅ Acesso premium liberado para ${email} (${userId})`);
       
-      // Atualizar o registro de log para marcar como processado
-      if (transactionId) {
-        try {
-          const logSnapshot = await db.collection('webhook_logs')
-            .where('transactionId', '==', transactionId)
-            .limit(1)
-            .get();
-          
-          if (!logSnapshot.empty) {
-            await logSnapshot.docs[0].ref.update({
-              processed: true,
-              usuarioId: userId,
-              processedAt: FieldValue.serverTimestamp()
-            });
-            console.log(`✅ Log de webhook marcado como processado`);
-          }
-        } catch (logError) {
-          console.error('❌ Erro ao atualizar log do webhook:', logError);
-        }
+      // Atualizar o log para indicar sucesso
+      try {
+        await db.collection('webhook_logs').add({
+          timestamp: FieldValue.serverTimestamp(),
+          endpoint: 'pagamento/aprovado',
+          status: 'sucesso',
+          email,
+          userId,
+          message: 'Usuário atualizado com sucesso'
+        });
+      } catch (logError) {
+        console.error('❌ Erro ao registrar log de sucesso:', logError);
       }
     } catch (updateError) {
-      console.error(`❌ Erro ao atualizar usuário ${userId}:`, updateError);
-      return NextResponse.json({ 
-        error: 'Erro ao atualizar usuário',
-        details: String(updateError)
-      }, { status: 200 });
+      console.error(`❌ Erro ao atualizar usuário:`, updateError);
+      
+      // Atualizar o log para indicar erro
+      try {
+        await db.collection('webhook_logs').add({
+          timestamp: FieldValue.serverTimestamp(),
+          endpoint: 'pagamento/aprovado',
+          status: 'erro',
+          email,
+          userId,
+          error: String(updateError)
+        });
+      } catch (logError) {
+        console.error('❌ Erro ao registrar log de erro:', logError);
+      }
+      
+      throw updateError;
     }
-    
+
     // Verificar se precisamos sincronizar com Auth
     if (needUserSync && !existingUserId) {
       console.log(`⚠️ Necessário verificar Auth mais tarde para este usuário`);
@@ -432,17 +415,41 @@ export async function POST(request: Request) {
 // Função para extrair email de várias estruturas possíveis
 function extractEmail(payload: Record<string, unknown>): string {
   let email = '';
+  console.log('🔍 Procurando email em:', JSON.stringify(payload, null, 2));
+  
+  // Verificar se temos o transaction ID
+  try {
+    if (payload?.purchase?.transaction) {
+      transactionId = String(payload.purchase.transaction);
+      console.log('💰 Transaction ID encontrado:', transactionId);
+    } else if (payload?.data?.purchase?.transaction) {
+      transactionId = String(payload.data.purchase.transaction);
+      console.log('💰 Transaction ID encontrado em data.purchase:', transactionId);
+    }
+  } catch (e) {
+    console.error('❌ Erro ao extrair transaction ID:', e);
+  }
   
   // Verificar primeiro nos custom_parameters ou extra_data (prioridade mais alta)
   if (payload?.data && typeof payload.data === 'object' && payload.data !== null) {
+    console.log('🔍 Procurando email em data');
     const data = payload.data as Record<string, unknown>;
+    
+    // Verificar email diretamente em data
+    if (data.email && typeof data.email === 'string') {
+      email = data.email;
+      console.log('📧 Email encontrado diretamente em data:', email);
+      return email;
+    }
     
     // Verificar se existe purchase com extra_data
     if (data.purchase && typeof data.purchase === 'object' && data.purchase !== null) {
+      console.log('🔍 Procurando email em data.purchase');
       const purchase = data.purchase as Record<string, unknown>;
       
       // Hotmart envia o email como um parâmetro personalizado
       if (purchase.extra_data && typeof purchase.extra_data === 'object' && purchase.extra_data !== null) {
+        console.log('🔍 Procurando email em data.purchase.extra_data');
         const extraData = purchase.extra_data as Record<string, unknown>;
         if (extraData.email && typeof extraData.email === 'string') {
           email = extraData.email;
@@ -453,6 +460,7 @@ function extractEmail(payload: Record<string, unknown>): string {
       
       // Verificar em custom_parameters também
       if (purchase.custom_parameters && typeof purchase.custom_parameters === 'object' && purchase.custom_parameters !== null) {
+        console.log('🔍 Procurando email em data.purchase.custom_parameters');
         const customParams = purchase.custom_parameters as Record<string, unknown>;
         if (customParams.email && typeof customParams.email === 'string') {
           email = customParams.email;
@@ -463,38 +471,64 @@ function extractEmail(payload: Record<string, unknown>): string {
     }
   }
   
-  // Extração direta (fallback para métodos anteriores)
-  if (payload?.buyer && typeof payload.buyer === 'object' && payload.buyer !== null && 'email' in payload.buyer) 
-    email = String(payload.buyer.email);
-  else if (payload?.data && typeof payload.data === 'object' && payload.data !== null && 'email' in payload.data) 
-    email = String(payload.data.email);
-  else if (payload?.client && typeof payload.client === 'object' && payload.client !== null && 'email' in payload.client) 
-    email = String(payload.client.email);
-  else if (payload?.email && typeof payload.email === 'string') 
-    email = payload.email;
-  else if (payload?.customer && typeof payload.customer === 'object' && payload.customer !== null && 'email' in payload.customer) 
-    email = String(payload.customer.email);
-  
-  // Extração de subestrutura data 
-  if (!email && payload?.data && typeof payload.data === 'object' && payload.data !== null) {
-    const data = payload.data as Record<string, unknown>;
-    if (data.buyer && typeof data.buyer === 'object' && data.buyer !== null && 'email' in data.buyer)
-      email = String(data.buyer.email);
-    else if (data.client && typeof data.client === 'object' && data.client !== null && 'email' in data.client)
-      email = String(data.client.email);
-    else if (data.customer && typeof data.customer === 'object' && data.customer !== null && 'email' in data.customer)
-      email = String(data.customer.email);
+  // Verificar em diversos campos possíveis (adicionados mais caminhos)
+  try {
+    // Verificar em campos comuns do Hotmart
+    if (payload?.buyer?.email && typeof payload.buyer.email === 'string') {
+      email = payload.buyer.email;
+      console.log('📧 Email encontrado em buyer.email:', email);
+      return email;
+    }
+    
+    if (payload?.data?.buyer?.email && typeof payload.data.buyer.email === 'string') {
+      email = payload.data.buyer.email;
+      console.log('📧 Email encontrado em data.buyer.email:', email);
+      return email;
+    }
+    
+    if (payload?.customer?.email && typeof payload.customer.email === 'string') {
+      email = payload.customer.email;
+      console.log('📧 Email encontrado em customer.email:', email);
+      return email;
+    }
+    
+    if (payload?.data?.customer?.email && typeof payload.data.customer.email === 'string') {
+      email = payload.data.customer.email;
+      console.log('📧 Email encontrado em data.customer.email:', email);
+      return email;
+    }
+    
+    // Pesquisar email em toda a estrutura (última tentativa)
+    const searchEmail = (obj: Record<string, any>, path = ''): string | null => {
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = path ? `${path}.${key}` : key;
+        
+        if (key === 'email' && typeof value === 'string' && value.includes('@')) {
+          console.log(`📧 Email encontrado em ${currentPath}:`, value);
+          return value;
+        }
+        
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const result = searchEmail(value, currentPath);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+    
+    if (!email && typeof payload === 'object' && payload !== null) {
+      console.log('🔍 Buscando email em toda a estrutura...');
+      const foundEmail = searchEmail(payload as Record<string, any>);
+      if (foundEmail) {
+        email = foundEmail;
+        return email;
+      }
+    }
+  } catch (error) {
+    console.error('❌ Erro ao extrair email:', error);
   }
   
-  // Extração de subestrutura purchase
-  if (!email && payload?.purchase && typeof payload.purchase === 'object' && payload.purchase !== null) {
-    const purchase = payload.purchase as Record<string, unknown>;
-    if (purchase.buyer && typeof purchase.buyer === 'object' && purchase.buyer !== null && 'email' in purchase.buyer)
-      email = String(purchase.buyer.email);
-    else if (purchase.customer && typeof purchase.customer === 'object' && purchase.customer !== null && 'email' in purchase.customer)
-      email = String(purchase.customer.email);
-  }
-  
+  console.log(`📧 Resultado final da extração de email: "${email}"`);
   return email || '';
 }
 
