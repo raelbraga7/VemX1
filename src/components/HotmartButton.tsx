@@ -33,10 +33,25 @@ export function HotmartButton({ plano, variant = 'default' }: HotmartButtonProps
       
       // Construir URL de checkout com parâmetros
       const params = new URLSearchParams({
-        off: 'r5di19vt', // Código de oferta
-        ref: user.uid,    // Referência do usuário (usado nos webhooks)
-        email: user.email || '',  // Pré-preencher o email
+        off: 'r5di19vt',        // Código de oferta
+        ref: user.uid,           // Referência do usuário (usado nos webhooks)
+        email: user.email || '', // Pré-preencher o email
       });
+      
+      // Adicionar parâmetros personalizados para garantir que o usuário seja identificado
+      // mesmo se usar um email diferente na hora do checkout
+      params.append('customization[custom_parameters]', JSON.stringify({
+        userId: user.uid,
+        userEmail: user.email,
+        appName: 'VemX1',
+        origin: 'appVemX1'
+      }));
+      
+      // Adicionar parâmetros extra para identificação em diferentes formatos
+      params.append('extra_data', JSON.stringify({
+        userId: user.uid,
+        email: user.email
+      }));
       
       // Redirecionar para a página de checkout do plano na Hotmart
       window.location.href = `${HOTMART_BASE_URL}?${params.toString()}`;
