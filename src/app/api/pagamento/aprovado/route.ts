@@ -19,6 +19,7 @@ interface UserData {
   authId?: string; // Opcional pois nem sempre estará presente
 }
 
+// Alterando interface para ser compatível com o Firestore Admin SDK
 interface UserUpdateData {
   premium: boolean;
   assinaturaAtiva: boolean;
@@ -28,6 +29,7 @@ interface UserUpdateData {
   dataUltimaAtualizacao: FieldValue;
   metodoPagamento: string;
   authId?: string; // Opcional
+  [key: string]: any; // Adicionando índice genérico para compatibilidade com o Firestore
 }
 
 export async function POST(request: Request) {
@@ -354,7 +356,7 @@ export async function POST(request: Request) {
     }
 
     // Atualiza o usuário
-    await usuariosRef.doc(userId).update(updateData);
+    await usuariosRef.doc(userId).update(updateData as Record<string, any>);
 
     console.log(`✅ Acesso premium liberado para ${email} (${userId})`);
     
