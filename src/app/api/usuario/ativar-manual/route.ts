@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
       // Atualizar documento existente
       console.log(`[API] Ativando assinatura do usuário ${userId} (${provider})`);
       
+      // Registrar o log de ativação primeiro
+      await db.collection('ativacoes_manuais').add({
+        userId,
+        plano,
+        provider,
+        modo,
+        timestamp: FieldValue.serverTimestamp(),
+        criadoPor: 'api_ativar_manual'
+      });
+      
+      // Atualizar o documento do usuário
       await userRef.update({
         statusAssinatura: modo,
         plano: plano,
@@ -90,6 +101,15 @@ export async function POST(req: NextRequest) {
         plano: plano,
         provider: provider,
         statusAssinatura: userData?.statusAssinatura,
+        userData: {
+          email: userData?.email,
+          statusAssinatura: userData?.statusAssinatura,
+          plano: userData?.plano,
+          premium: userData?.premium,
+          assinaturaAtiva: userData?.assinaturaAtiva,
+          dataAssinatura: userData?.dataAssinatura,
+          dataExpiracao: userData?.dataExpiracao
+        }
       });
     } catch (dbError: unknown) {
       console.error('[API] Erro ao atualizar status no Firestore:', dbError);
