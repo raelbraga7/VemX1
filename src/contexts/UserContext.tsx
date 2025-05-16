@@ -103,16 +103,43 @@ export function UserProvider({ children }: { children: ReactNode }) {
     
     // Configurar listener para atualizações em tempo real do status da assinatura
     const userRef = doc(db, 'usuarios', user.uid);
+    console.log(`[UserContext] Configurando listener em tempo real para assinatura do usuário ${user.uid}`);
+    
     const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
       try {
         if (docSnapshot.exists()) {
           const userData = docSnapshot.data();
+          const statusAnterior = temAssinaturaAtiva ? 'ativa' : 'inativa';
           const statusAssinatura = userData?.statusAssinatura;
-          console.log(`[UserContext] Status da assinatura atualizado em tempo real: ${statusAssinatura}`);
+          const plano = userData?.plano || 'não definido';
           
-          setTemAssinaturaAtiva(
-            statusAssinatura === 'ativa' || statusAssinatura === 'teste'
-          );
+          console.log(`[UserContext] Dados do usuário atualizados em tempo real:`, {
+            uid: user.uid,
+            statusAssinatura,
+            premium: userData?.premium,
+            assinaturaAtiva: userData?.assinaturaAtiva,
+            plano,
+            dataAssinatura: userData?.dataAssinatura ? new Date(userData.dataAssinatura.toDate()).toISOString() : 'não definida',
+            dataUltimaAtualizacao: userData?.dataUltimaAtualizacao ? new Date(userData.dataUltimaAtualizacao.toDate()).toISOString() : 'não definida',
+          });
+          
+          const novoStatus = statusAssinatura === 'ativa' || statusAssinatura === 'teste';
+          console.log(`[UserContext] Status da assinatura atualizado em tempo real: ${statusAssinatura} (${novoStatus ? 'ativa' : 'inativa'})`);
+          
+          // Se houve mudança no status, força uma atualização do contexto
+          if (novoStatus !== temAssinaturaAtiva) {
+            console.log(`[UserContext] Mudança detectada: de ${statusAnterior} para ${novoStatus ? 'ativa' : 'inativa'}`);
+            setTemAssinaturaAtiva(novoStatus);
+            
+            // Forçar recarga da página se o usuário ganhou acesso premium
+            if (novoStatus && !temAssinaturaAtiva) {
+              console.log('[UserContext] Assinatura ativada! Recarregando a página para aplicar mudanças...');
+              // Usar setTimeout para garantir que o estado seja atualizado antes do reload
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500);
+            }
+          }
         } else {
           console.log(`[UserContext] Documento do usuário não encontrado no Firestore`);
           setTemAssinaturaAtiva(false);
@@ -129,7 +156,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     });
     
     return () => unsubscribe();
-  }, [user]);
+  }, [user, temAssinaturaAtiva]);
 
   return (
     <UserContext.Provider value={{ 
