@@ -12,6 +12,11 @@ export interface UserData {
   assistencias: number;
   photoURL?: string; // URL opcional da foto do perfil
   convidadoPor?: string; // Novo campo: quem convidou o usuário
+  // Campos de assinatura
+  premium?: boolean;
+  assinaturaAtiva?: boolean;
+  statusAssinatura?: string;
+  plano?: string;
 }
 
 export const createUser = async (uid: string, nome: string, email: string, convidadoPor?: string): Promise<void> => {
@@ -32,7 +37,9 @@ export const createUser = async (uid: string, nome: string, email: string, convi
       userData.convidadoPor = convidadoPor;
     }
 
-    await setDoc(doc(db, 'users', uid), userData);
+    await setDoc(doc(db, 'usuarios', uid), userData);
+    
+    console.log(`Usuário ${uid} criado na coleção 'usuarios'`);
   } catch (error) {
     console.error('Erro ao criar usuário:', error);
     throw error;
@@ -47,11 +54,40 @@ export const getUser = async (uid: string): Promise<UserData | null> => {
     }
 
     console.log('Buscando usuário:', uid);
-    const userDoc = await getDoc(doc(db, 'users', uid));
+    
+    const userDoc = await getDoc(doc(db, 'usuarios', uid));
     
     if (userDoc.exists()) {
       const userData = userDoc.data();
+      console.log(`Usuário ${uid} encontrado na coleção 'usuarios'`);
+      
       // Garante que todos os campos obrigatórios existam
+      return {
+        uid: userData.uid || uid,
+        nome: userData.nome || 'Usuário',
+        email: userData.email || '',
+        dataCriacao: userData.dataCriacao?.toDate() || new Date(),
+        peladas: Array.isArray(userData.peladas) ? userData.peladas : [],
+        vitorias: userData.vitorias || 0,
+        gols: userData.gols || 0,
+        assistencias: userData.assistencias || 0,
+        photoURL: userData.photoURL,
+        // Campos de assinatura
+        premium: userData.premium,
+        assinaturaAtiva: userData.assinaturaAtiva,
+        statusAssinatura: userData.statusAssinatura,
+        plano: userData.plano
+      };
+    }
+    
+    console.log(`Usuário ${uid} não encontrado na coleção 'usuarios', tentando na coleção 'users'...`);
+    const legacyUserDoc = await getDoc(doc(db, 'users', uid));
+    
+    if (legacyUserDoc.exists()) {
+      const userData = legacyUserDoc.data();
+      console.log(`Usuário ${uid} encontrado na coleção 'users'. Migração recomendada.`);
+      
+      // Retorna os dados da coleção 'users'
       return {
         uid: userData.uid || uid,
         nome: userData.nome || 'Usuário',
@@ -65,7 +101,7 @@ export const getUser = async (uid: string): Promise<UserData | null> => {
       };
     }
     
-    console.log('Usuário não encontrado:', uid);
+    console.log('Usuário não encontrado em nenhuma coleção:', uid);
     return null;
   } catch (error) {
     console.error('Erro detalhado ao buscar usuário:', {

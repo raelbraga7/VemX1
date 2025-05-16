@@ -9,7 +9,12 @@ import { verificarAssinaturaAtiva } from '@/firebase/assinaturaService';
 interface UserData {
   nome: string;
   email: string;
-  createdAt: Date;
+  createdAt?: Date;
+  // Campos adicionais que podem estar presentes na coleção 'usuarios'
+  premium?: boolean;
+  assinaturaAtiva?: boolean;
+  statusAssinatura?: string;
+  plano?: string;
 }
 
 interface UserContextType {
@@ -46,9 +51,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
       
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          // ⚠️ CORRIGIDO: Buscar na coleção 'usuarios' em vez de 'users'
+          const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
           if (userDoc.exists()) {
             setUserData(userDoc.data() as UserData);
+            
+            // ⚠️ OTIMIZAÇÃO: Já verifica status de assinatura aqui para evitar chamada adicional
+            const status = userDoc.data()?.statusAssinatura;
+            if (status === 'ativa' || status === 'teste') {
+              setTemAssinaturaAtiva(true);
+              setVerificandoAssinatura(false);
+            }
+          } else {
+            console.log(`Usuário ${user.uid} não encontrado na coleção 'usuarios'. Criando documento...`);
+            // Opcionalmente, pode-se criar um documento básico na coleção 'usuarios' aqui
           }
         } catch (error) {
           console.error('Erro ao buscar dados do usuário:', error);
@@ -71,7 +87,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     console.log(`[UserContext] Configurando verificação de assinatura para usuário: ${user.uid}`);
     setVerificandoAssinatura(true);
     
-    // Verificação inicial
+    // Verificação inicial já é feita no primeiro useEffect, mas mantemos esta como fallback
     verificarAssinaturaAtiva(user.uid)
       .then(assinaturaAtiva => {
         console.log(`[UserContext] Verificação inicial da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);

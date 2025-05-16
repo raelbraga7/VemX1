@@ -108,10 +108,19 @@ export const getPartidasByPeladaId = async (peladaId: string): Promise<Partida[]
  */
 export const getUserById = async (uid: string): Promise<{ nome: string } | null> => {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
+    // ⚠️ CORRIGIDO: Buscar primeiro na coleção 'usuarios'
+    let userDoc = await getDoc(doc(db, 'usuarios', uid));
+    
     if (userDoc.exists()) {
       return userDoc.data() as { nome: string };
     }
+    
+    // ⚠️ FALLBACK: Se não encontrar na coleção 'usuarios', tentar na coleção 'users'
+    userDoc = await getDoc(doc(db, 'users', uid));
+    if (userDoc.exists()) {
+      return userDoc.data() as { nome: string };
+    }
+    
     return null;
   } catch (error) {
     console.error('Erro ao buscar usuário:', error);
