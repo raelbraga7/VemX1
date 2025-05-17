@@ -112,15 +112,18 @@ export const getUserById = async (uid: string): Promise<{ nome: string } | null>
     let userDoc = await getDoc(doc(db, 'usuarios', uid));
     
     if (userDoc.exists()) {
-      return userDoc.data() as { nome: string };
+      const userData = userDoc.data();
+      return { nome: userData.nome };
     }
     
     // ⚠️ FALLBACK: Se não encontrar na coleção 'usuarios', tentar na coleção 'users'
     userDoc = await getDoc(doc(db, 'users', uid));
     if (userDoc.exists()) {
-      return userDoc.data() as { nome: string };
+      const userData = userDoc.data();
+      return { nome: userData.nome };
     }
     
+    // Se não encontrar o usuário, retornar null em vez de criar um nome genérico
     return null;
   } catch (error) {
     console.error('Erro ao buscar usuário:', error);
