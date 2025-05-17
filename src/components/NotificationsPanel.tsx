@@ -241,9 +241,10 @@ const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
                           {formatNotificationDate(notification.timestamp)}
                         </time>
                       </div>
-                      <p className="text-sm text-gray-600 mb-3">
-                        {notification.message}
-                      </p>
+                      <div 
+                        className="text-sm text-gray-600 mb-3"
+                        dangerouslySetInnerHTML={{ __html: notification.message }}
+                      />
                       
                       <NotificationActionButtons
                         notification={notification}
