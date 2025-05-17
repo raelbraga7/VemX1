@@ -302,7 +302,7 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
         inicio: Timestamp.fromDate(agora),
         fim: Timestamp.fromDate(fimTemporada),
         status: 'ativa' as const,
-        tipo: tipoTela
+        tipo: tipoTela // Garantir que a temporada tenha o tipo correto
       };
       
       const peladaRef = doc(db, 'peladas', peladaId);
@@ -345,7 +345,7 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
         ranking: rankingAtualizado // Usar o ranking com nomes preservados
       });
       
-      toast.success(`Temporada de ${tipoTela} iniciada! Duração: 1 minuto`);
+      toast.success(`Temporada de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'} iniciada! Duração: 1 minuto`);
       
       // Atualiza a página para mostrar a contagem regressiva
       window.location.reload();
@@ -463,7 +463,12 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
       )}
 
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">{temporada?.nome || `Temporada de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}`}</h2>
+        <h2 className="text-2xl font-bold">
+          {/* Sempre mostra o tipo de temporada conforme a tela atual, independente dos dados da temporada */}
+          {temporada?.status === 'ativa'
+            ? (temporada.nome || `Temporada de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}`)
+            : `Temporada de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}`}
+        </h2>
         {isOwner && (
           <div title={botaoTooltip}>
             <button
