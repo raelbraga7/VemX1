@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
-import { auth } from '@/firebase/admin';
+import { getAuth } from 'firebase-admin/auth';
 import { cookies } from 'next/headers';
+
+// Inicializar o Auth
+const auth = getAuth();
 
 export async function POST(req: NextRequest) {
   // Configurar headers CORS para permitir solicitações de qualquer origem
