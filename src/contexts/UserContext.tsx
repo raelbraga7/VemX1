@@ -82,81 +82,41 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Efeito separado para monitorar o status da assinatura
   useEffect(() => {
-    if (!user) return;
-    
-    console.log(`[UserContext] Configurando verificação de assinatura para usuário: ${user.uid}`);
-    setVerificandoAssinatura(true);
-    
-    // Verificação inicial já é feita no primeiro useEffect, mas mantemos esta como fallback
-    verificarAssinaturaAtiva(user.uid)
-      .then(assinaturaAtiva => {
-        console.log(`[UserContext] Verificação inicial da assinatura: ${assinaturaAtiva ? 'Ativa' : 'Inativa'}`);
-        setTemAssinaturaAtiva(assinaturaAtiva);
-      })
-      .catch(error => {
-        console.error('[UserContext] Erro na verificação inicial da assinatura:', error);
-        setTemAssinaturaAtiva(false);
-      })
-      .finally(() => {
-        setVerificandoAssinatura(false);
-      });
-    
-    // Configurar listener para atualizações em tempo real do status da assinatura
-    const userRef = doc(db, 'usuarios', user.uid);
-    console.log(`[UserContext] Configurando listener em tempo real para assinatura do usuário ${user.uid}`);
-    
-    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
+    const verificarAssinatura = async (userId: string) => {
       try {
-        if (docSnapshot.exists()) {
-          const userData = docSnapshot.data();
-          const statusAnterior = temAssinaturaAtiva ? 'ativa' : 'inativa';
-          const statusAssinatura = userData?.statusAssinatura;
-          const plano = userData?.plano || 'não definido';
-          
-          console.log(`[UserContext] Dados do usuário atualizados em tempo real:`, {
-            uid: user.uid,
-            statusAssinatura,
-            premium: userData?.premium,
-            assinaturaAtiva: userData?.assinaturaAtiva,
-            plano,
-            dataAssinatura: userData?.dataAssinatura ? new Date(userData.dataAssinatura.toDate()).toISOString() : 'não definida',
-            dataUltimaAtualizacao: userData?.dataUltimaAtualizacao ? new Date(userData.dataUltimaAtualizacao.toDate()).toISOString() : 'não definida',
-          });
-          
-          const novoStatus = statusAssinatura === 'ativa' || statusAssinatura === 'teste';
-          console.log(`[UserContext] Status da assinatura atualizado em tempo real: ${statusAssinatura} (${novoStatus ? 'ativa' : 'inativa'})`);
-          
-          // Se houve mudança no status, força uma atualização do contexto
-          if (novoStatus !== temAssinaturaAtiva) {
-            console.log(`[UserContext] Mudança detectada: de ${statusAnterior} para ${novoStatus ? 'ativa' : 'inativa'}`);
-            setTemAssinaturaAtiva(novoStatus);
-            
-            // Forçar recarga da página se o usuário ganhou acesso premium
-            if (novoStatus && !temAssinaturaAtiva) {
-              console.log('[UserContext] Assinatura ativada! Recarregando a página para aplicar mudanças...');
-              // Usar setTimeout para garantir que o estado seja atualizado antes do reload
-              setTimeout(() => {
-                window.location.reload();
-              }, 1500);
-            }
-          }
-        } else {
-          console.log(`[UserContext] Documento do usuário não encontrado no Firestore`);
-          setTemAssinaturaAtiva(false);
+        setVerificandoAssinatura(true);
+        console.log('[UserContext] Verificando assinatura para usuário:', userId);
+        
+        // Primeiro, verificar se a informação já está no localStorage para mostrar imediatamente
+        const assinaturaLocalStorage = localStorage.getItem('temAssinaturaAtiva');
+        if (assinaturaLocalStorage === 'true' || assinaturaLocalStorage === 'false') {
+          setTemAssinaturaAtiva(assinaturaLocalStorage === 'true');
         }
+        
+        // Em paralelo, verificar com o servidor
+        const assinaturaAtiva = await verificarAssinaturaAtiva(userId);
+        console.log('[UserContext] Status da assinatura:', assinaturaAtiva);
+        
+        // Atualizar o estado e também o localStorage
+        setTemAssinaturaAtiva(assinaturaAtiva);
+        localStorage.setItem('temAssinaturaAtiva', assinaturaAtiva.toString());
       } catch (error) {
-        console.error('[UserContext] Erro ao processar atualização da assinatura:', error);
+        console.error('[UserContext] Erro ao verificar assinatura:', error);
         setTemAssinaturaAtiva(false);
+        localStorage.setItem('temAssinaturaAtiva', 'false');
       } finally {
         setVerificandoAssinatura(false);
       }
-    }, (error) => {
-      console.error('[UserContext] Erro no listener da assinatura:', error);
-      setVerificandoAssinatura(false);
-    });
-    
-    return () => unsubscribe();
-  }, [user, temAssinaturaAtiva]);
+    };
+
+    if (user?.uid) {
+      verificarAssinatura(user.uid);
+    } else {
+      // Se não houver usuário, garantir que a assinatura seja marcada como inativa
+      setTemAssinaturaAtiva(false);
+      localStorage.setItem('temAssinaturaAtiva', 'false');
+    }
+  }, [user]);
 
   return (
     <UserContext.Provider value={{ 

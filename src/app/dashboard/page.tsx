@@ -115,6 +115,18 @@ export default function Dashboard() {
   useEffect(() => {
     const pagamento = searchParams?.get('pagamento');
     const plano = searchParams?.get('plano');
+    const openPlanosModal = searchParams?.get('openPlanosModal');
+    
+    // Abrir o modal de planos se o parâmetro estiver presente
+    if (openPlanosModal === 'true') {
+      setIsPlanosModalOpen(true);
+      
+      // Limpar o parâmetro da URL
+      if (window.history.replaceState) {
+        const url = window.location.href.split('?')[0];
+        window.history.replaceState({path: url}, '', url);
+      }
+    }
     
     if (pagamento) {
       console.log(`[Dashboard] Detectado parâmetro de pagamento: ${pagamento}, plano: ${plano}`);
@@ -641,8 +653,8 @@ export default function Dashboard() {
       />
 
       {/* Banner de Acesso Limitado - Exibir apenas se o usuário já tiver criado uma pelada e não tiver assinatura ativa */}
-      {!temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && peladaData && (
-        <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
+      {(temAssinaturaAtiva === false) && !verificandoAssinatura && !bannerFechado && peladaData && (
+        <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs z-50">
           <div className="flex justify-between items-start mb-2">
             <h3 className="font-bold">Acesso Limitado</h3>
             <button 
