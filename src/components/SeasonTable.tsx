@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, Timestamp, collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
@@ -14,6 +14,17 @@ interface RankingData {
   gols: number;
   assistencias: number;
   nome: string;
+}
+
+interface RankingTimeData {
+  id: string;
+  nome: string;
+  vitorias: number;
+  derrotas: number;
+  golsPro: number;
+  golsContra: number;
+  saldoGols: number;
+  pontos: number;
 }
 
 interface SeasonTableProps {
@@ -159,6 +170,68 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
             return; 
           }
 
+          // Se for uma temporada de time, zera o rankingTimes ao encerrar
+          if (tipoTela === 'time' || temporada.tipo === 'time') {
+            if (peladaData?.rankingTimes) {
+              const rankingTimesAtualizado: Record<string, RankingTimeData> = {};
+              
+              // Preserva a estrutura dos times, mas zera todos os valores estatísticos
+              Object.entries(peladaData.rankingTimes).forEach(([timeId, dados]) => {
+                if (dados) {
+                  const dadosTime = dados as DocumentData;
+                  rankingTimesAtualizado[timeId] = {
+                    id: timeId,
+                    nome: dadosTime.nome || `Time ${timeId.substring(0, 4)}`,
+                    vitorias: 0,
+                    derrotas: 0,
+                    golsPro: 0,
+                    golsContra: 0,
+                    saldoGols: 0,
+                    pontos: 0
+                  };
+                }
+              });
+              
+              // Atualiza o status da temporada e zera o ranking de times
+              await updateDoc(peladaRef, {
+                'temporada.status': 'encerrada',
+                rankingTimes: rankingTimesAtualizado
+              });
+              
+              // Buscar e zerar estatísticas dos jogadores por time
+              const timesRef = collection(db, 'times');
+              const q = query(timesRef, where('peladaId', '==', peladaId));
+              const timesSnapshot = await getDocs(q);
+              
+              const atualizacoesTimes = timesSnapshot.docs.map(async (timeDoc) => {
+                const timeRef = doc(db, 'times', timeDoc.id);
+                const jogadoresStats = collection(timeRef, 'jogadoresStats');
+                const jogadoresStatsSnapshot = await getDocs(jogadoresStats);
+                
+                // Zerar estatísticas de cada jogador dentro do time
+                const atualizacoesJogadores = jogadoresStatsSnapshot.docs.map(async (jogadorDoc) => {
+                  await updateDoc(doc(jogadoresStats, jogadorDoc.id), {
+                    vitorias: 0,
+                    derrotas: 0,
+                    gols: 0,
+                    assistencias: 0,
+                    pontos: 0,
+                    jogos: 0
+                  });
+                });
+                
+                await Promise.all(atualizacoesJogadores);
+              });
+              
+              await Promise.all(atualizacoesTimes);
+              
+              toast.success('Temporada de Time encerrada! O ranking de times foi zerado.');
+              clearInterval(intervalo);
+              return;
+            }
+          }
+
+          // Código original para temporadas de pelada
           if (peladaData?.ranking) {
             // Verifica se há algum jogador no ranking
             const jogadores = Object.entries(peladaData.ranking);
@@ -216,7 +289,7 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
               }
             }
 
-            toast.success('Temporada encerrada! O ranking foi zerado.');
+            toast.success('Temporada de Pelada encerrada! O ranking foi zerado.');
           }
           
           // Limpa o intervalo para parar completamente as verificações
