@@ -192,7 +192,10 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
               try {
                 // Função para formatar mensagem para o campeão
                 const mensagemCampeao = () => {
-                  return `Parabéns ${melhorJogador.nome}! Você foi o grande campeão da temporada "${temporada.nome}" com ${melhorJogador.pontos} pontos! 🎉\n\nSeus números impressionantes:\n• ${melhorJogador.vitorias} vitórias\n• ${melhorJogador.gols} gols\n• ${melhorJogador.assistencias} assistências\n\nContinue assim, você é uma lenda do VemX1! 🌟\n\n🎁 Quer garantir seu troféu ou premiação?\nFale agora com nosso suporte no WhatsApp clicando no botão abaixo e solicite sua recompensa exclusiva:\n<a href="https://wa.me/5511900000000" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
+                  const texto = encodeURIComponent(`Olá! Sou ${melhorJogador.nome}, fui campeão da temporada "${temporada.nome}" e gostaria de solicitar o troféu. 🏆`);
+                  const linkWhatsApp = `https://wa.me/5522998345691?text=${texto}`;
+                  
+                  return `Parabéns ${melhorJogador.nome}! Você foi o grande campeão da temporada "${temporada.nome}" com ${melhorJogador.pontos} pontos! 🎉\n\nSeus números impressionantes:\n• ${melhorJogador.vitorias} vitórias\n• ${melhorJogador.gols} gols\n• ${melhorJogador.assistencias} assistências\n\nContinue assim, você é uma lenda do VemX1! 🌟\n\n🎁 Quer garantir seu troféu ou premiação?\nFale agora com nosso suporte no WhatsApp clicando no link abaixo e solicite sua recompensa exclusiva:\n<a href="${linkWhatsApp}" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
                 };
                 
                 await createPeladaNotification(

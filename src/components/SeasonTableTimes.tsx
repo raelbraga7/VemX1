@@ -109,9 +109,12 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
 
   // Função para formatar mensagem para o time campeão
   const mensagemCampeao = (nomeTime: string) => {
+    const texto = encodeURIComponent(`Olá! O time ${nomeTime} foi campeão da temporada e gostaria de solicitar o troféu. 🏆`);
+    const linkWhatsApp = `https://wa.me/5522998345691?text=${texto}`;
+    
     return `Parabéns! O time ${nomeTime} é o campeão da temporada!\n\n` +
       `Entre em contato com o suporte pelo WhatsApp para receber seu troféu ou premiação! 🏆\n\n` +
-      `<a href="https://wa.me/5511900000000" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
+      `<a href="${linkWhatsApp}" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
   };
 
   // Função para calcular o tempo restante
