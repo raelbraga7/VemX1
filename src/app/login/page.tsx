@@ -343,22 +343,22 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black">
-      <div className="w-full max-w-md px-4 py-6 sm:px-6">
-        <div className="text-center mb-4">
-          <h2 className="text-3xl font-extrabold text-white">
+      <div className="w-full max-w-md px-3 py-4 sm:px-6 sm:py-6">
+        <div className="text-center mb-3 sm:mb-4">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
             VemX1
           </h2>
           {cadastroSucesso && (
-            <div className="mt-1 p-2 bg-green-100 text-green-800 rounded text-center text-sm">
+            <div className="mt-1 p-1.5 sm:p-2 bg-green-100 text-green-800 rounded text-center text-xs sm:text-sm">
               Cadastro realizado com sucesso! Faça login para continuar.
             </div>
           )}
         </div>
 
-        <div className="bg-gray-900 px-4 py-6 shadow sm:rounded-lg sm:px-8 text-white">
-          <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="bg-gray-900 px-3 py-4 sm:px-8 sm:py-6 shadow rounded-lg text-white">
+          <form className="space-y-3 sm:space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-gray-300">
                 Email
               </label>
               <div className="mt-1">
@@ -370,14 +370,14 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="appearance-none block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                   disabled={loading || bloqueado}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-gray-300">
                 Senha
               </label>
               <div className="mt-1">
@@ -389,14 +389,14 @@ export default function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="appearance-none block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                   disabled={loading || bloqueado}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="text-sm">
+            <div className="flex items-center justify-end">
+              <div className="text-xs sm:text-sm">
                 <button
                   type="button"
                   onClick={() => setShowResetForm(true)}
@@ -408,13 +408,13 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-2 rounded relative text-sm" role="alert">
+              <div className="bg-red-900 border border-red-700 text-red-100 px-2 sm:px-4 py-1.5 sm:py-2 rounded relative text-xs sm:text-sm" role="alert">
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
 
             {resetSuccess && (
-              <div className="bg-green-900 border border-green-700 text-green-100 px-4 py-2 rounded relative text-sm" role="alert">
+              <div className="bg-green-900 border border-green-700 text-green-100 px-2 sm:px-4 py-1.5 sm:py-2 rounded relative text-xs sm:text-sm" role="alert">
                 <span className="block sm:inline">
                   Um link para redefinir sua senha foi enviado para o seu e-mail.
                 </span>
@@ -424,7 +424,7 @@ export default function Login() {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                className="w-full flex justify-center py-1.5 sm:py-2 px-3 sm:px-4 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
                 disabled={loading || bloqueado}
               >
                 {loading ? 'Entrando...' : bloqueado ? `Bloqueado (${Math.ceil(tempoRestante / 1000)}s)` : 'Entrar'}
@@ -433,11 +433,11 @@ export default function Login() {
           </form>
 
           {showResetForm && (
-            <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
-              <h3 className="text-sm font-medium text-gray-200 mb-3">Redefinir senha</h3>
+            <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gray-800 rounded-lg border border-gray-700">
+              <h3 className="text-xs sm:text-sm font-medium text-gray-200 mb-2 sm:mb-3">Redefinir senha</h3>
               <form onSubmit={handleResetPassword}>
                 <div>
-                  <label htmlFor="reset-email" className="block text-sm font-medium text-gray-300">
+                  <label htmlFor="reset-email" className="block text-xs sm:text-sm font-medium text-gray-300">
                     Email
                   </label>
                   <div className="mt-1">
@@ -448,23 +448,23 @@ export default function Login() {
                       required
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
-                      className="appearance-none block w-full px-3 py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="appearance-none block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                       disabled={resetLoading}
                     />
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-2 sm:mt-3 flex items-center justify-between">
                   <button
                     type="button"
                     onClick={() => setShowResetForm(false)}
-                    className="text-sm font-medium text-gray-400 hover:text-gray-300"
+                    className="text-xs sm:text-sm font-medium text-gray-400 hover:text-gray-300"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400"
+                    className="inline-flex justify-center py-1.5 sm:py-2 px-3 sm:px-4 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400"
                     disabled={resetLoading}
                   >
                     {resetLoading ? 'Enviando...' : 'Enviar link'}
@@ -474,26 +474,26 @@ export default function Login() {
             </div>
           )}
 
-          <div className="mt-4">
+          <div className="mt-3 sm:mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
+              <div className="relative flex justify-center text-xs sm:text-sm">
                 <span className="px-2 bg-gray-900 text-gray-400">
                   Ou continue com
                 </span>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2 sm:mt-3">
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                className="w-full flex justify-center items-center py-2 px-4 border border-gray-700 rounded-md shadow-sm text-sm font-medium text-white bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
+                className="w-full flex justify-center items-center py-1.5 sm:py-2 px-3 sm:px-4 border border-gray-700 rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
                 disabled={loading}
               >
-                <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" width="24" height="24">
+                <svg className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" viewBox="0 0 24 24" width="24" height="24">
                   <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
                     <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
                     <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
@@ -506,22 +506,22 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3 sm:mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
+              <div className="relative flex justify-center text-xs sm:text-sm">
                 <span className="px-2 bg-gray-900 text-gray-400">
                   Não tem uma conta?
                 </span>
               </div>
             </div>
 
-            <div className="mt-3 text-center">
+            <div className="mt-2 sm:mt-3 text-center">
               <Link 
                 href={peladaId ? `/cadastro?peladaId=${peladaId}` : '/cadastro'} 
-                className="font-medium text-blue-400 hover:text-blue-300"
+                className="font-medium text-blue-400 hover:text-blue-300 text-xs sm:text-sm"
               >
                 Registre-se
               </Link>

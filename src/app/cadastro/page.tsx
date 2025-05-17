@@ -149,20 +149,20 @@ export default function Cadastro() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black">
-      <div className="w-full max-w-md px-4 py-6 sm:px-6">
-        <div className="text-center mb-4">
-          <h2 className="text-3xl font-extrabold text-white">
+      <div className="w-full max-w-md px-3 py-4 sm:px-6 sm:py-6">
+        <div className="text-center mb-3 sm:mb-4">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
             VemX1
           </h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="mt-1 text-xs sm:text-sm text-gray-400">
             {peladaId ? 'Você foi convidado para uma pelada!' : 'Entre para o mundo das peladas organizadas'}
           </p>
         </div>
 
-        <div className="bg-gray-900 px-4 py-6 shadow sm:rounded-lg sm:px-8">
-          <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="bg-gray-900 px-3 py-4 sm:px-8 sm:py-6 shadow rounded-lg">
+          <form className="space-y-3 sm:space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="nome" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="nome" className="block text-xs sm:text-sm font-medium text-gray-300">
                 Nome completo
               </label>
               <div className="mt-1">
@@ -174,14 +174,14 @@ export default function Cadastro() {
                   required
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="appearance-none block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                   disabled={loading}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-gray-300">
                 Email
               </label>
               <div className="mt-1">
@@ -193,14 +193,14 @@ export default function Cadastro() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="appearance-none block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                   disabled={loading}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-gray-300">
                 Senha
               </label>
               <div className="mt-1">
@@ -212,7 +212,7 @@ export default function Cadastro() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="appearance-none block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-700 bg-gray-800 rounded-md shadow-sm placeholder-gray-500 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                   disabled={loading}
                 />
               </div>
@@ -222,7 +222,7 @@ export default function Cadastro() {
             </div>
 
             {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-2 rounded relative text-sm" role="alert">
+              <div className="bg-red-900 border border-red-700 text-red-100 px-2 sm:px-4 py-1.5 sm:py-2 rounded relative text-xs sm:text-sm" role="alert">
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
@@ -230,7 +230,7 @@ export default function Cadastro() {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                className="w-full flex justify-center py-1.5 sm:py-2 px-3 sm:px-4 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
                 disabled={loading}
               >
                 {loading ? 'Cadastrando...' : 'Cadastrar'}
@@ -238,26 +238,26 @@ export default function Cadastro() {
             </div>
           </form>
 
-          <div className="mt-4">
+          <div className="mt-3 sm:mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
+              <div className="relative flex justify-center text-xs sm:text-sm">
                 <span className="px-2 bg-gray-900 text-gray-400">
                   Ou continue com
                 </span>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2 sm:mt-3">
               <button
                 type="button"
                 onClick={handleGoogleSignUp}
-                className="w-full flex justify-center items-center py-2 px-4 border border-gray-700 rounded-md shadow-sm text-sm font-medium text-white bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
+                className="w-full flex justify-center items-center py-1.5 sm:py-2 px-3 sm:px-4 border border-gray-700 rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
                 disabled={loading}
               >
-                <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" width="24" height="24">
+                <svg className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" viewBox="0 0 24 24" width="24" height="24">
                   <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
                     <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
                     <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
@@ -270,22 +270,22 @@ export default function Cadastro() {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3 sm:mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
+              <div className="relative flex justify-center text-xs sm:text-sm">
                 <span className="px-2 bg-gray-900 text-gray-400">
                   Já tem uma conta?
                 </span>
               </div>
             </div>
 
-            <div className="mt-3 text-center">
+            <div className="mt-2 sm:mt-3 text-center">
               <Link
                 href={peladaId ? `/login?peladaId=${peladaId}` : '/login'}
-                className="font-medium text-blue-400 hover:text-blue-300"
+                className="font-medium text-blue-400 hover:text-blue-300 text-xs sm:text-sm"
               >
                 Faça login
               </Link>
