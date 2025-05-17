@@ -115,6 +115,11 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     // Se não houver temporada ou se o tipo da temporada não coincidir com o tipo da tela, não mostre o cronômetro
     if (!temporada?.fim || !temporada.fim.seconds) return;
     
+    // Verifica se o tipo da temporada não coincide com o tipo da tela
+    if (temporada.tipo && temporada.tipo !== tipoTela) {
+      return;
+    }
+    
     // Se estamos na tela de pelada, só mostrar temporada de pelada
     // Se estamos na tela de time, só mostrar temporada de time
     if (tipoTela === 'pelada' && temporada.tipo === 'time') return;
@@ -185,11 +190,16 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
             // Só depois envia a notificação, se houver um campeão
             if (melhorJogador) {
               try {
+                // Função para formatar mensagem para o campeão
+                const mensagemCampeao = () => {
+                  return `Parabéns ${melhorJogador.nome}! Você foi o grande campeão da temporada "${temporada.nome}" com ${melhorJogador.pontos} pontos! 🎉\n\nSeus números impressionantes:\n• ${melhorJogador.vitorias} vitórias\n• ${melhorJogador.gols} gols\n• ${melhorJogador.assistencias} assistências\n\nContinue assim, você é uma lenda do VemX1! 🌟\n\n🎁 Quer garantir seu troféu ou premiação?\nFale agora com nosso suporte no WhatsApp clicando no botão abaixo e solicite sua recompensa exclusiva:\n<a href="https://wa.me/5511900000000" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
+                };
+                
                 await createPeladaNotification(
                   melhorJogador.id,
                   peladaId,
-                  '🏆 VemX1: Parabéns Campeão!',
-                  `Parabéns ${melhorJogador.nome}! Você foi o grande campeão da temporada "${temporada.nome}" com ${melhorJogador.pontos} pontos! 🎉\n\nSeus números impressionantes:\n• ${melhorJogador.vitorias} vitórias\n• ${melhorJogador.gols} gols\n• ${melhorJogador.assistencias} assistências\n\nContinue assim, você é uma lenda do VemX1! 🌟`
+                  `🏆 VemX1: Parabéns Campeão de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}!`,
+                  mensagemCampeao()
                 );
               } catch (notificationError) {
                 console.error('Erro ao enviar notificação:', notificationError);
@@ -279,7 +289,7 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
       const fimTemporada = new Date(agora.getTime() + 60000); // +60000ms = 1 minuto
       
       const novaTemporadaData = {
-        nome: `Temporada Rápida`,
+        nome: `Temporada de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}`,
         inicio: Timestamp.fromDate(agora),
         fim: Timestamp.fromDate(fimTemporada),
         status: 'ativa' as const,
