@@ -440,7 +440,7 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md mx-4">
             <h3 className="text-xl font-bold mb-4">Confirmar início de temporada</h3>
-            <p className="mb-6">Tem certeza de que quer começar a temporada do time? Essa ação não poderá ser desfeita.</p>
+            <p className="mb-6">Tem certeza de que quer começar a temporada de {tipoTela === 'pelada' ? 'pelada' : 'time'}? Essa ação não poderá ser desfeita.</p>
             <div className="flex justify-end space-x-3">
               <button 
                 onClick={() => setShowConfirmacao(false)}
