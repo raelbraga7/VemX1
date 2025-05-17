@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { doc, updateDoc, getDoc, Timestamp, collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, Timestamp, DocumentData } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
@@ -192,13 +192,49 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
                 }
               });
               
-              // Atualiza o status da temporada e zera o ranking de times
+              // Prepara objeto para zerar estatísticas individuais dos jogadores por time
+              // As estatísticas dos jogadores estão em estatisticasTime.timeId.jogadorId
+              interface JogadorEstatistica {
+                gols: number;
+                assistencias: number;
+                vitorias: number;
+                derrotas: number;
+                pontos: number;
+                jogos: number;
+                empates: number;
+              }
+              
+              const estatisticasTimeZeradas: Record<string, Record<string, JogadorEstatistica>> = {};
+              if (peladaData.estatisticasTime) {
+                // Preservamos a estrutura, mas zeramos todos os valores
+                Object.keys(peladaData.estatisticasTime).forEach(timeId => {
+                  estatisticasTimeZeradas[timeId] = {};
+                  
+                  // Se existem estatísticas para o time, preservamos os jogadores mas zeramos os valores
+                  if (peladaData.estatisticasTime[timeId]) {
+                    Object.keys(peladaData.estatisticasTime[timeId]).forEach(jogadorId => {
+                      estatisticasTimeZeradas[timeId][jogadorId] = {
+                        gols: 0,
+                        assistencias: 0,
+                        vitorias: 0,
+                        derrotas: 0,
+                        pontos: 0,
+                        jogos: 0,
+                        empates: 0
+                      };
+                    });
+                  }
+                });
+              }
+              
+              // Atualiza o status da temporada, zera o ranking de times e as estatísticas dos jogadores
               await updateDoc(peladaRef, {
                 'temporada.status': 'encerrada',
-                rankingTimes: rankingTimesAtualizado
+                rankingTimes: rankingTimesAtualizado,
+                estatisticasTime: estatisticasTimeZeradas
               });
               
-              toast.success('Temporada de Time encerrada! O ranking de times foi zerado.');
+              toast.success('Temporada de Time encerrada! O ranking de times e as estatísticas dos jogadores foram zerados.');
               clearInterval(intervalo);
               return;
             }
