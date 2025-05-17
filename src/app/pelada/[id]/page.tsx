@@ -267,7 +267,7 @@ export default function PaginaPelada() {
         )}
 
         {/* Banner de Acesso Limitado - Exibe apenas para o dono da pelada */}
-        {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && (
+        {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && peladaData && (
           <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
             <div className="flex justify-between items-start mb-2">
               <h3 className="font-bold">Acesso Limitado</h3>

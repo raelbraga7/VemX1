@@ -640,8 +640,8 @@ export default function Dashboard() {
         onReject={handleReject}
       />
 
-      {/* Remover banner de acesso limitado da tela de dashboard */}
-      {/* {!temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && (
+      {/* Banner de Acesso Limitado - Exibir apenas se o usuário já tiver criado uma pelada e não tiver assinatura ativa */}
+      {!temAssinaturaAtiva && !verificandoAssinatura && !bannerFechado && peladaData && (
         <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
           <div className="flex justify-between items-start mb-2">
             <h3 className="font-bold">Acesso Limitado</h3>
@@ -663,7 +663,7 @@ export default function Dashboard() {
             Ver Planos
           </button>
         </div>
-      )} */}
+      )}
 
       <div className="h-8" />
     </div>
