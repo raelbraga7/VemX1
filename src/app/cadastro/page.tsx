@@ -148,19 +148,19 @@ export default function Cadastro() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-black">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-          VemX1
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-400">
-          {peladaId ? 'Você foi convidado para uma pelada!' : 'Entre para o mundo das peladas organizadas'}
-        </p>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="w-full max-w-md px-4 py-6 sm:px-6">
+        <div className="text-center mb-4">
+          <h2 className="text-3xl font-extrabold text-white">
+            VemX1
+          </h2>
+          <p className="mt-1 text-sm text-gray-400">
+            {peladaId ? 'Você foi convidado para uma pelada!' : 'Entre para o mundo das peladas organizadas'}
+          </p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-gray-900 py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+        <div className="bg-gray-900 px-4 py-6 shadow sm:rounded-lg sm:px-8">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="nome" className="block text-sm font-medium text-gray-300">
                 Nome completo
@@ -222,7 +222,7 @@ export default function Cadastro() {
             </div>
 
             {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded relative" role="alert">
+              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-2 rounded relative text-sm" role="alert">
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
@@ -238,7 +238,7 @@ export default function Cadastro() {
             </div>
           </form>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
@@ -250,7 +250,7 @@ export default function Cadastro() {
               </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-3">
               <button
                 type="button"
                 onClick={handleGoogleSignUp}
@@ -270,7 +270,7 @@ export default function Cadastro() {
             </div>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
@@ -282,7 +282,7 @@ export default function Cadastro() {
               </div>
             </div>
 
-            <div className="mt-6 text-center">
+            <div className="mt-3 text-center">
               <Link
                 href={peladaId ? `/login?peladaId=${peladaId}` : '/login'}
                 className="font-medium text-blue-400 hover:text-blue-300"

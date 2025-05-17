@@ -342,21 +342,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-black">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-          VemX1
-        </h2>
-        {cadastroSucesso && (
-          <div className="mt-2 mx-4 sm:mx-auto p-2 bg-green-100 text-green-800 rounded text-center text-sm">
-            Cadastro realizado com sucesso! Faça login para continuar.
-          </div>
-        )}
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="w-full max-w-md px-4 py-6 sm:px-6">
+        <div className="text-center mb-4">
+          <h2 className="text-3xl font-extrabold text-white">
+            VemX1
+          </h2>
+          {cadastroSucesso && (
+            <div className="mt-1 p-2 bg-green-100 text-green-800 rounded text-center text-sm">
+              Cadastro realizado com sucesso! Faça login para continuar.
+            </div>
+          )}
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-gray-900 py-8 px-4 shadow sm:rounded-lg sm:px-10 text-white">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+        <div className="bg-gray-900 px-4 py-6 shadow sm:rounded-lg sm:px-8 text-white">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300">
                 Email
@@ -408,13 +408,13 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded relative" role="alert">
+              <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-2 rounded relative text-sm" role="alert">
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
 
             {resetSuccess && (
-              <div className="bg-green-900 border border-green-700 text-green-100 px-4 py-3 rounded relative" role="alert">
+              <div className="bg-green-900 border border-green-700 text-green-100 px-4 py-2 rounded relative text-sm" role="alert">
                 <span className="block sm:inline">
                   Um link para redefinir sua senha foi enviado para o seu e-mail.
                 </span>
@@ -433,8 +433,8 @@ export default function Login() {
           </form>
 
           {showResetForm && (
-            <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-              <h3 className="text-lg font-medium text-gray-200 mb-4">Redefinir senha</h3>
+            <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+              <h3 className="text-sm font-medium text-gray-200 mb-3">Redefinir senha</h3>
               <form onSubmit={handleResetPassword}>
                 <div>
                   <label htmlFor="reset-email" className="block text-sm font-medium text-gray-300">
@@ -454,7 +454,7 @@ export default function Login() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between">
+                <div className="mt-3 flex items-center justify-between">
                   <button
                     type="button"
                     onClick={() => setShowResetForm(false)}
@@ -474,7 +474,7 @@ export default function Login() {
             </div>
           )}
 
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
@@ -486,7 +486,7 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-3">
               <button
                 type="button"
                 onClick={handleGoogleLogin}
@@ -506,7 +506,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-700"></div>
@@ -518,7 +518,7 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="mt-6 text-center">
+            <div className="mt-3 text-center">
               <Link 
                 href={peladaId ? `/cadastro?peladaId=${peladaId}` : '/cadastro'} 
                 className="font-medium text-blue-400 hover:text-blue-300"
