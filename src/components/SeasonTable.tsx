@@ -5,6 +5,8 @@ import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
+import { renderToString } from 'react-dom/server';
+import MensagemCampeaoPelada from './MensagemCampeaoPelada';
 
 interface RankingData {
   pontos: number;
@@ -190,19 +192,23 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
             // Só depois envia a notificação, se houver um campeão
             if (melhorJogador) {
               try {
-                // Função para formatar mensagem para o campeão
-                const mensagemCampeao = () => {
-                  const texto = encodeURIComponent(`Olá! Sou ${melhorJogador.nome}, fui campeão da temporada "${temporada.nome}" e gostaria de solicitar o troféu. 🏆`);
-                  const linkWhatsApp = `https://wa.me/5522998345691?text=${texto}`;
-                  
-                  return `Parabéns ${melhorJogador.nome}! Você foi o grande campeão da temporada "${temporada.nome}" com ${melhorJogador.pontos} pontos! 🎉\n\nSeus números impressionantes:\n• ${melhorJogador.vitorias} vitórias\n• ${melhorJogador.gols} gols\n• ${melhorJogador.assistencias} assistências\n\nContinue assim, você é uma lenda do VemX1! 🌟\n\n🎁 Quer garantir seu troféu ou premiação?\nFale agora com nosso suporte no WhatsApp clicando no link abaixo e solicite sua recompensa exclusiva:\n<a href="${linkWhatsApp}" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
-                };
+                // Renderizar o componente MensagemCampeaoPelada para HTML
+                const mensagemHTML = renderToString(
+                  <MensagemCampeaoPelada
+                    nomeJogador={melhorJogador.nome}
+                    pontos={melhorJogador.pontos}
+                    vitorias={melhorJogador.vitorias}
+                    gols={melhorJogador.gols}
+                    assistencias={melhorJogador.assistencias}
+                    temporadaNome={temporada.nome}
+                  />
+                );
                 
                 await createPeladaNotification(
                   melhorJogador.id,
                   peladaId,
                   `🏆 VemX1: Parabéns Campeão de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}!`,
-                  mensagemCampeao()
+                  mensagemHTML
                 );
               } catch (notificationError) {
                 console.error('Erro ao enviar notificação:', notificationError);

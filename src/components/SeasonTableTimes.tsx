@@ -5,6 +5,8 @@ import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
+import { renderToString } from 'react-dom/server';
+import MensagemCampeao from './MensagemCampeao';
 
 interface RankingTimeData {
   id: string;
@@ -106,16 +108,6 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     
     buscarTimes();
   }, [peladaId]);
-
-  // Função para formatar mensagem para o time campeão
-  const mensagemCampeao = (nomeTime: string) => {
-    const texto = encodeURIComponent(`Olá! O time ${nomeTime} foi campeão da temporada e gostaria de solicitar o troféu. 🏆`);
-    const linkWhatsApp = `https://wa.me/5522998345691?text=${texto}`;
-    
-    return `Parabéns! O time ${nomeTime} é o campeão da temporada!\n\n` +
-      `Entre em contato com o suporte pelo WhatsApp para receber seu troféu ou premiação! 🏆\n\n` +
-      `<a href="${linkWhatsApp}" style="color: blue; text-decoration: underline;">👉 Pedir troféu no WhatsApp</a>`;
-  };
 
   // Função para calcular o tempo restante
   const calcularTempoRestante = (dataFim: Timestamp) => {
@@ -227,11 +219,15 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
                 // Enviar notificação para cada jogador do time
                 for (const jogador of jogadores) {
                   try {
+                    const mensagemHTML = renderToString(
+                      <MensagemCampeao nomeTime={timeCampeao.nome} />
+                    );
+                      
                     await createPeladaNotification(
                       jogador.id,
                       peladaId,
                       "Campeão da Temporada de Time",
-                      mensagemCampeao(timeCampeao.nome)
+                      mensagemHTML
                     );
                   } catch (notificationError) {
                     console.error('Erro ao enviar notificação para jogador:', notificationError);
@@ -348,11 +344,15 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
 
             // Enviar notificação
             if (timeCampeao.userId) {
+              const mensagemHTML = renderToString(
+                <MensagemCampeao nomeTime={timeCampeao.nome} />
+              );
+              
               createPeladaNotification(
                 timeCampeao.userId,
                 peladaId,
                 "Campeão da Temporada de Time",
-                mensagemCampeao(timeCampeao.nome)
+                mensagemHTML
               );
             }
 
