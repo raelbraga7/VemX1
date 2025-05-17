@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
 import { renderToString } from 'react-dom/server';
 import MensagemCampeaoPelada from './MensagemCampeaoPelada';
+import MensagemCampeao from './MensagemCampeao';
 
 interface RankingData {
   pontos: number;
@@ -227,6 +228,94 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
                 });
               }
               
+              // Encontrar o time campeão (o com maior pontuação)
+              interface TimeCampeao extends RankingTimeData {
+                id: string;
+              }
+              
+              const timeCampeao = Object.entries(peladaData.rankingTimes).reduce<TimeCampeao | null>(
+                (melhor, [timeId, dados]) => {
+                  const timeData = dados as DocumentData;
+                  if (!melhor || timeData.pontos > melhor.pontos) {
+                    return { 
+                      id: timeId, 
+                      nome: timeData.nome || '',
+                      vitorias: timeData.vitorias || 0,
+                      derrotas: timeData.derrotas || 0,
+                      golsPro: timeData.golsPro || 0,
+                      golsContra: timeData.golsContra || 0,
+                      saldoGols: timeData.saldoGols || 0,
+                      pontos: timeData.pontos || 0
+                    };
+                  }
+                  return melhor;
+                },
+                null
+              );
+              
+              // Buscar informações do time campeão para saber quem é o capitão
+              if (timeCampeao) {
+                const timeRef = doc(db, 'times', timeCampeao.id);
+                const timeDoc = await getDoc(timeRef);
+                
+                if (timeDoc.exists()) {
+                  const timeData = timeDoc.data();
+                  const capitaoId = timeData.capitaoId;
+                  const jogadores = timeData.jogadores || [];
+                  
+                  // Enviar notificação para cada jogador do time campeão
+                  for (const jogador of jogadores) {
+                    const jogadorId = jogador.id;
+                    const isCapitao = jogadorId === capitaoId;
+                    
+                    // Buscar estatísticas específicas deste jogador no time
+                    let jogadorStats = {
+                      vitorias: 0,
+                      gols: 0,
+                      assistencias: 0,
+                      pontos: 0,
+                      jogos: 0
+                    };
+                    
+                    // Buscar estatísticas do jogador se existirem
+                    if (peladaData.estatisticasTime && 
+                        peladaData.estatisticasTime[timeCampeao.id] && 
+                        peladaData.estatisticasTime[timeCampeao.id][jogadorId]) {
+                      const stats = peladaData.estatisticasTime[timeCampeao.id][jogadorId];
+                      jogadorStats = {
+                        vitorias: stats.vitorias || 0,
+                        gols: stats.gols || 0,
+                        assistencias: stats.assistencias || 0,
+                        pontos: stats.pontos || 0,
+                        jogos: stats.jogos || 0
+                      };
+                    }
+                    
+                    // Renderizar a mensagem personalizada para este jogador
+                    const mensagemHTML = renderToString(
+                      <MensagemCampeao 
+                        nomeTime={timeCampeao.nome} 
+                        jogadorStats={jogadorStats}
+                        isCapitao={isCapitao}
+                      />
+                    );
+                    
+                    // Enviar notificação
+                    try {
+                      await createPeladaNotification(
+                        jogadorId,
+                        peladaId,
+                        `🏆 VemX1: Parabéns Campeão de Time!`,
+                        mensagemHTML
+                      );
+                    } catch (notificationError) {
+                      console.error('Erro ao enviar notificação para jogador:', notificationError);
+                      // Continua com os outros jogadores mesmo se falhar
+                    }
+                  }
+                }
+              }
+              
               // Atualiza o status da temporada, zera o ranking de times e as estatísticas dos jogadores
               await updateDoc(peladaRef, {
                 'temporada.status': 'encerrada',
@@ -236,12 +325,6 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
               
               toast.success('Temporada de Time encerrada! O ranking de times e as estatísticas dos jogadores foram zerados.');
               clearInterval(intervalo);
-              
-              // Forçar a atualização da página para refletir as mudanças em todas as telas
-              setTimeout(() => {
-                window.location.reload();
-              }, 1500); // Atraso para que o usuário veja a mensagem antes da atualização
-              
               return;
             }
           }
@@ -305,11 +388,6 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
             }
 
             toast.success('Temporada de Pelada encerrada! O ranking foi zerado.');
-            
-            // Forçar a atualização da página para refletir as mudanças em todas as telas
-            setTimeout(() => {
-              window.location.reload();
-            }, 1500); // Atraso para que o usuário veja a mensagem antes da atualização
           }
           
           // Limpa o intervalo para parar completamente as verificações
