@@ -5,7 +5,7 @@ import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
-import { renderToString } from 'react-dom/server';
+import { gerarTextoNotificacaoCampeaoPelada } from './MensagemCampeaoPelada';
 import MensagemCampeaoPelada from './MensagemCampeaoPelada';
 
 interface RankingData {
@@ -192,23 +192,21 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
             // Só depois envia a notificação, se houver um campeão
             if (melhorJogador) {
               try {
-                // Renderizar o componente MensagemCampeaoPelada para HTML
-                const mensagemHTML = renderToString(
-                  <MensagemCampeaoPelada
-                    nomeJogador={melhorJogador.nome}
-                    pontos={melhorJogador.pontos}
-                    vitorias={melhorJogador.vitorias}
-                    gols={melhorJogador.gols}
-                    assistencias={melhorJogador.assistencias}
-                    temporadaNome={temporada.nome}
-                  />
-                );
+                // Gerar o texto da notificação
+                const mensagemTexto = gerarTextoNotificacaoCampeaoPelada({
+                  nomeJogador: melhorJogador.nome,
+                  pontos: melhorJogador.pontos,
+                  vitorias: melhorJogador.vitorias,
+                  gols: melhorJogador.gols,
+                  assistencias: melhorJogador.assistencias,
+                  temporadaNome: temporada.nome
+                });
                 
                 await createPeladaNotification(
                   melhorJogador.id,
                   peladaId,
                   `🏆 VemX1: Parabéns Campeão de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}!`,
-                  mensagemHTML
+                  mensagemTexto
                 );
               } catch (notificationError) {
                 console.error('Erro ao enviar notificação:', notificationError);

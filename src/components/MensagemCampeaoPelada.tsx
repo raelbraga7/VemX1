@@ -9,6 +9,7 @@ type Props = {
   temporadaNome: string;
 };
 
+// Componente React para exibição na UI
 export default function MensagemCampeaoPelada({ 
   nomeJogador, 
   pontos, 
@@ -41,4 +42,29 @@ export default function MensagemCampeaoPelada({
       </Link>
     </div>
   );
+}
+
+// Função para gerar texto simples para notificações
+export function gerarTextoNotificacaoCampeaoPelada({ 
+  nomeJogador, 
+  pontos, 
+  vitorias, 
+  gols, 
+  assistencias,
+  temporadaNome 
+}: Props): string {
+  const texto = encodeURIComponent(`Olá! Sou ${nomeJogador}, fui campeão da temporada "${temporadaNome}" e gostaria de solicitar meu troféu. 🏆`);
+  
+  return `Parabéns ${nomeJogador}! Você foi o grande campeão da temporada "${temporadaNome}" com ${pontos} pontos! 🎉
+
+Seus números impressionantes:
+• ${vitorias} vitórias
+• ${gols} gols
+• ${assistencias} assistências
+
+Continue assim, você é uma lenda do VemX1! 🌟
+
+🎁 Quer garantir seu troféu ou premiação?
+Fale agora com nosso suporte no WhatsApp clicando no botão abaixo e solicite sua recompensa exclusiva:
+<a href="https://wa.me/5522998345691?text=${texto}" style="color:blue;text-decoration:underline;">👉 Pedir troféu no WhatsApp</a>`;
 } 

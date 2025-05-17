@@ -5,8 +5,7 @@ import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
-import { renderToString } from 'react-dom/server';
-import MensagemCampeao from './MensagemCampeao';
+import { gerarTextoNotificacaoTimeCampeao } from './MensagemCampeao';
 
 interface RankingTimeData {
   id: string;
@@ -219,15 +218,15 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
                 // Enviar notificação para cada jogador do time
                 for (const jogador of jogadores) {
                   try {
-                    const mensagemHTML = renderToString(
-                      <MensagemCampeao nomeTime={timeCampeao.nome} />
-                    );
+                    const mensagemTexto = gerarTextoNotificacaoTimeCampeao({
+                      nomeTime: timeCampeao.nome
+                    });
                       
                     await createPeladaNotification(
                       jogador.id,
                       peladaId,
                       "Campeão da Temporada de Time",
-                      mensagemHTML
+                      mensagemTexto
                     );
                   } catch (notificationError) {
                     console.error('Erro ao enviar notificação para jogador:', notificationError);
@@ -344,15 +343,15 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
 
             // Enviar notificação
             if (timeCampeao.userId) {
-              const mensagemHTML = renderToString(
-                <MensagemCampeao nomeTime={timeCampeao.nome} />
-              );
+              const mensagemTexto = gerarTextoNotificacaoTimeCampeao({
+                nomeTime: timeCampeao.nome
+              });
               
               createPeladaNotification(
                 timeCampeao.userId,
                 peladaId,
                 "Campeão da Temporada de Time",
-                mensagemHTML
+                mensagemTexto
               );
             }
 
