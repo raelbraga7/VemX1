@@ -19,6 +19,7 @@ export default function Header() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationWithId[]>([]);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<NotificationWithId | null>(null);
   const unreadCount = notifications.filter(n => !n.read).length;
 
   // Carregar notificações do usuário ao montar o componente
@@ -69,14 +70,52 @@ export default function Header() {
     }
   };
 
-  const handleConfirm = async (_notification: NotificationWithId) => {
-    // Implementação da função handleConfirm
-    toast.success('Notificação confirmada');
+  // Função para marcar uma notificação como lida
+  const handleConfirm = async () => {
+    if (selectedNotification) {
+      try {
+        await updateDoc(doc(db, 'notifications', selectedNotification.id), {
+          read: true,
+          confirmada: true,
+        });
+
+        setNotifications(prev => 
+          prev.map(n => n.id === selectedNotification.id 
+            ? { ...n, read: true, confirmada: true } 
+            : n
+          )
+        );
+        
+        setSelectedNotification(null);
+      } catch (error) {
+        console.error("Erro ao confirmar notificação:", error);
+        toast.error("Erro ao confirmar notificação");
+      }
+    }
   };
 
-  const handleReject = async (_notification: NotificationWithId) => {
-    // Implementação da função handleReject
-    toast.info('Notificação rejeitada');
+  // Função para rejeitar uma notificação
+  const handleReject = async () => {
+    if (selectedNotification) {
+      try {
+        await updateDoc(doc(db, 'notifications', selectedNotification.id), {
+          read: true,
+          confirmada: false,
+        });
+
+        setNotifications(prev => 
+          prev.map(n => n.id === selectedNotification.id 
+            ? { ...n, read: true, confirmada: false } 
+            : n
+          )
+        );
+        
+        setSelectedNotification(null);
+      } catch (error) {
+        console.error("Erro ao rejeitar notificação:", error);
+        toast.error("Erro ao rejeitar notificação");
+      }
+    }
   };
 
   return (

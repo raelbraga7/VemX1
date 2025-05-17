@@ -5,7 +5,8 @@ import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
-import { gerarTextoNotificacaoTimeCampeao } from './MensagemCampeao';
+import { renderToString } from 'react-dom/server';
+import MensagemCampeao from './MensagemCampeao';
 
 interface RankingTimeData {
   id: string;
@@ -44,8 +45,6 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     segundos: 0
   });
   const [temporadaPeladaAtiva, setTemporadaPeladaAtiva] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [temporadaCriada, setTemporadaCriada] = useState(false);
   const [times, setTimes] = useState<RankingTimeData[]>([]);
 
   // Verificar se há uma temporada de pelada ativa
@@ -85,17 +84,30 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
           if (peladaDoc.exists()) {
             const peladaData = peladaDoc.data();
             if (peladaData.times && peladaData.times.lista) {
-              const timesList = Object.entries(peladaData.times.lista).map(([id, data]: [string, any]) => ({
-                id,
-                nome: data.nome,
-                vitorias: data.vitorias || 0,
-                derrotas: data.derrotas || 0,
-                golsPro: data.golsPro || 0,
-                golsContra: data.golsContra || 0,
-                saldoGols: data.saldoGols || 0,
-                pontos: data.pontos || 0,
-                userId: data.userId || null
-              }));
+              const timesList = Object.entries(peladaData.times.lista).map(([id, data]: [string, unknown]) => {
+                const timeData = data as {
+                  nome?: string;
+                  vitorias?: number;
+                  derrotas?: number;
+                  golsPro?: number;
+                  golsContra?: number;
+                  saldoGols?: number;
+                  pontos?: number;
+                  userId?: string | null;
+                };
+                
+                return {
+                  id,
+                  nome: timeData.nome || '',
+                  vitorias: timeData.vitorias || 0,
+                  derrotas: timeData.derrotas || 0,
+                  golsPro: timeData.golsPro || 0,
+                  golsContra: timeData.golsContra || 0,
+                  saldoGols: timeData.saldoGols || 0,
+                  pontos: timeData.pontos || 0,
+                  userId: timeData.userId || null
+                };
+              });
               setTimes(timesList);
             }
           }
@@ -218,15 +230,15 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
                 // Enviar notificação para cada jogador do time
                 for (const jogador of jogadores) {
                   try {
-                    const mensagemTexto = gerarTextoNotificacaoTimeCampeao({
-                      nomeTime: timeCampeao.nome
-                    });
+                    const mensagemHTML = renderToString(
+                      <MensagemCampeao nomeTime={timeCampeao.nome} />
+                    );
                       
                     await createPeladaNotification(
                       jogador.id,
                       peladaId,
                       "Campeão da Temporada de Time",
-                      mensagemTexto
+                      mensagemHTML
                     );
                   } catch (notificationError) {
                     console.error('Erro ao enviar notificação para jogador:', notificationError);
@@ -306,8 +318,6 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
   };
 
   const handleIniciarTemporadaAutomatica = async () => {
-    setLoading(true);
-
     try {
       // Criar nova temporada com duração de 1 minuto
       const agora = Timestamp.now();
@@ -343,15 +353,15 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
 
             // Enviar notificação
             if (timeCampeao.userId) {
-              const mensagemTexto = gerarTextoNotificacaoTimeCampeao({
-                nomeTime: timeCampeao.nome
-              });
+              const mensagemHTML = renderToString(
+                <MensagemCampeao nomeTime={timeCampeao.nome} />
+              );
               
               createPeladaNotification(
                 timeCampeao.userId,
                 peladaId,
                 "Campeão da Temporada de Time",
-                mensagemTexto
+                mensagemHTML
               );
             }
 
@@ -375,7 +385,8 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
             }
           }
 
-          setTemporadaCriada(true);
+          // Recarregar a página para mostrar as alterações
+          window.location.reload();
         } catch (error) {
           console.error("Erro ao finalizar temporada:", error);
         }
@@ -385,8 +396,6 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     } catch (error) {
       console.error("Erro ao iniciar temporada:", error);
       toast.error('Erro ao iniciar temporada');
-    } finally {
-      setLoading(false);
     }
   };
 
