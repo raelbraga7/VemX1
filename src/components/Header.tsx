@@ -95,6 +95,15 @@ export default function Header() {
             </button>
           )}
           
+          {user && temAssinaturaAtiva && !verificandoAssinatura && (
+            <button
+              onClick={() => router.push('/dashboard?openCancelModal=true')}
+              className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors"
+            >
+              Cancelar Assinatura
+            </button>
+          )}
+          
           {/* Adicionar o sininho de notificação */}
           {user && (
             <NotificationBell 

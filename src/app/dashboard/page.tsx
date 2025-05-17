@@ -103,6 +103,7 @@ export default function Dashboard() {
   const [bannerFechado, setBannerFechado] = useState(false);
   const [loadingPlano, setLoadingPlano] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -111,16 +112,26 @@ export default function Dashboard() {
     }
   }, [user, loading, router]);
 
-  // Verificar parâmetros de URL para pagamento
+  // Verificar parâmetros de URL para pagamento e modais
   useEffect(() => {
     const pagamento = searchParams?.get('pagamento');
     const plano = searchParams?.get('plano');
     const openPlanosModal = searchParams?.get('openPlanosModal');
+    const openCancelModal = searchParams?.get('openCancelModal');
     
     // Abrir o modal de planos se o parâmetro estiver presente
     if (openPlanosModal === 'true') {
       setIsPlanosModalOpen(true);
-      
+      // Limpar o parâmetro da URL
+      if (window.history.replaceState) {
+        const url = window.location.href.split('?')[0];
+        window.history.replaceState({path: url}, '', url);
+      }
+    }
+
+    // Abrir o modal de cancelamento se o parâmetro estiver presente
+    if (openCancelModal === 'true' && temAssinaturaAtiva) {
+      setCancelModalOpen(true);
       // Limpar o parâmetro da URL
       if (window.history.replaceState) {
         const url = window.location.href.split('?')[0];
@@ -406,6 +417,40 @@ export default function Dashboard() {
     }
   };
 
+  // Adicionar função para cancelar assinatura
+  const handleCancelSubscription = async () => {
+    try {
+      if (!user) return;
+      
+      setLoadingPlano('cancel');
+      
+      // Chamar a API para cancelar assinatura
+      const response = await fetch('/api/assinatura/cancelar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: user.uid }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Erro ao cancelar assinatura');
+      }
+      
+      // Atualizar o estado do usuário
+      setTemAssinaturaAtiva(false);
+      localStorage.setItem('temAssinaturaAtiva', 'false');
+      
+      toast.success('Assinatura cancelada com sucesso!');
+      setCancelModalOpen(false);
+    } catch (error) {
+      console.error('Erro ao cancelar assinatura:', error);
+      toast.error('Erro ao cancelar assinatura. Tente novamente.');
+    } finally {
+      setLoadingPlano(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -676,6 +721,57 @@ export default function Dashboard() {
           </button>
         </div>
       )}
+
+      {/* Adicionar o modal de cancelamento de assinatura */}
+      <Dialog 
+        open={cancelModalOpen} 
+        onClose={() => setCancelModalOpen(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
+        <div className="fixed inset-0 overflow-y-auto">
+          <Dialog.Panel className="mx-auto mt-16 max-w-lg p-6 rounded-xl bg-[#1a1a1a] text-white">
+            <div className="flex flex-col items-center">
+              <Dialog.Title className="text-2xl font-bold mb-4">
+                Cancelar Assinatura
+              </Dialog.Title>
+              
+              <Dialog.Description className="text-center mb-6 text-gray-300">
+                Tem certeza que deseja cancelar sua assinatura premium? Você perderá acesso a todos os recursos premium.
+              </Dialog.Description>
+              
+              <div className="w-full space-y-4">
+                <p className="text-red-400 text-sm text-center">
+                  Atenção: Ao cancelar, você continuará tendo acesso aos recursos premium até o final do período atual já pago.
+                </p>
+                
+                <div className="flex gap-4 justify-center mt-6">
+                  <button 
+                    onClick={() => setCancelModalOpen(false)}
+                    className="px-6 py-3 bg-gray-600 rounded-lg text-white hover:bg-gray-700 transition-colors"
+                  >
+                    Manter Assinatura
+                  </button>
+                  <button 
+                    onClick={handleCancelSubscription}
+                    disabled={loadingPlano === 'cancel'}
+                    className="px-6 py-3 bg-red-600 rounded-lg text-white hover:bg-red-700 transition-colors disabled:opacity-70"
+                  >
+                    {loadingPlano === 'cancel' ? 'Processando...' : 'Confirmar Cancelamento'}
+                  </button>
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setCancelModalOpen(false)}
+                className="mt-6 px-4 py-1 text-sm text-gray-300 hover:text-white"
+              >
+                Fechar
+              </button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
 
       <div className="h-8" />
     </div>
