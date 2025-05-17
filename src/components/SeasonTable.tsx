@@ -112,18 +112,131 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
     }
   };
 
-  // Verificar se há temporada ativa e calcular o tempo restante
+  // Atualiza o tempo restante a cada 1 segundo
   useEffect(() => {
-    if (peladaId && temporada?.status === 'ativa' && temporada.fim) {
-      const interval = setInterval(() => {
-        atualizarTempo(temporada.fim);
-      }, 1000);
-
-      atualizarTempo(temporada.fim);
-
-      return () => clearInterval(interval);
+    // Se não houver temporada ou se o tipo da temporada não coincidir com o tipo da tela, não mostre o cronômetro
+    if (!temporada?.fim || !temporada.fim.seconds) return;
+    
+    // Verifica se o tipo da temporada não coincide com o tipo da tela
+    if (temporada.tipo && temporada.tipo !== tipoTela) {
+      return;
     }
-  }, [peladaId, temporada?.status, temporada?.fim, temporada.tipo]);
+    
+    // Se estamos na tela de pelada, só mostrar temporada de pelada
+    // Se estamos na tela de time, só mostrar temporada de time
+    if (tipoTela === 'pelada' && temporada.tipo === 'time') return;
+    if (tipoTela === 'time' && temporada.tipo === 'pelada') return;
+    
+    // Verificar se a temporada já está encerrada e não enviar notificações novamente
+    if (temporada.status === 'encerrada') return;
+
+    let foiProcessado = false; // Flag para evitar processamento duplicado
+
+    const atualizarTempo = async () => {
+      // Cálculo local sem consultar o Firebase
+      const tempoAtual = calcularTempoRestante(temporada.fim);
+      setTempoRestante(tempoAtual);
+
+      // Verifica se a temporada acabou (todos os valores são 0)
+      if (!foiProcessado && 
+          tempoAtual.dias === 0 && 
+          tempoAtual.horas === 0 && 
+          tempoAtual.minutos === 0 && 
+          tempoAtual.segundos === 0) {
+        
+        // Marca imediatamente como processado para evitar chamadas duplicadas
+        foiProcessado = true;
+        
+        try {
+          // Busca o ranking atual
+          const peladaRef = doc(db, 'peladas', peladaId);
+          const peladaDoc = await getDoc(peladaRef);
+          const peladaData = peladaDoc.data();
+          
+          // Verifica se a temporada já foi encerrada para evitar duplicação
+          if (peladaData?.temporada?.status === 'encerrada') {
+            clearInterval(intervalo); // Para completamente se já foi encerrada
+            return; 
+          }
+
+          if (peladaData?.ranking) {
+            // Verifica se há algum jogador no ranking
+            const jogadores = Object.entries(peladaData.ranking);
+            
+            if (jogadores.length === 0) {
+              // Se não há jogadores no ranking, apenas encerra a temporada sem enviar notificação
+              await updateDoc(peladaRef, {
+                'temporada.status': 'encerrada',
+                ranking: {},
+              });
+              
+              toast.success('Temporada encerrada! Não houve jogadores classificados.');
+              clearInterval(intervalo);
+              return;
+            }
+            
+            // Encontra o jogador com mais pontos
+            const melhorJogador = jogadores.reduce<{ id: string } & RankingData | null>((melhor, [jogadorId, dados]) => {
+              const jogadorDados = dados as RankingData;
+              return (!melhor || jogadorDados.pontos > melhor.pontos) 
+                ? { id: jogadorId, ...jogadorDados }
+                : melhor;
+            }, null);
+
+            // Primeiro atualiza o status da temporada para evitar processamento duplicado
+            await updateDoc(peladaRef, {
+              'temporada.status': 'encerrada',
+              ranking: {},
+            });
+            
+            // Só depois envia a notificação, se houver um campeão
+            if (melhorJogador) {
+              try {
+                // Renderizar o componente MensagemCampeaoPelada para HTML
+                const mensagemHTML = renderToString(
+                  <MensagemCampeaoPelada
+                    nomeJogador={melhorJogador.nome}
+                    pontos={melhorJogador.pontos}
+                    vitorias={melhorJogador.vitorias}
+                    gols={melhorJogador.gols}
+                    assistencias={melhorJogador.assistencias}
+                    temporadaNome={temporada.nome}
+                  />
+                );
+                
+                await createPeladaNotification(
+                  melhorJogador.id,
+                  peladaId,
+                  `🏆 VemX1: Parabéns Campeão de ${tipoTela === 'pelada' ? 'Pelada' : 'Time'}!`,
+                  mensagemHTML
+                );
+              } catch (notificationError) {
+                console.error('Erro ao enviar notificação:', notificationError);
+                // Mesmo que falhe o envio de notificação, continuamos o processo
+              }
+            }
+
+            toast.success('Temporada encerrada! O ranking foi zerado.');
+          }
+          
+          // Limpa o intervalo para parar completamente as verificações
+          clearInterval(intervalo);
+          
+        } catch (error) {
+          console.error('Erro ao finalizar temporada:', error);
+          toast.error('Erro ao finalizar a temporada');
+        }
+      }
+    };
+
+    // Executa uma vez imediatamente
+    atualizarTempo();
+    
+    // Define um intervalo de 1 segundo para atualização em tempo real
+    const intervalo = setInterval(atualizarTempo, 1000);
+
+    return () => clearInterval(intervalo);
+  }, [temporada?.fim, temporada?.status, peladaId, temporada?.nome, tipoTela]);
 
   const handleSalvar = async () => {
     try {
@@ -194,9 +307,42 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
       
       const peladaRef = doc(db, 'peladas', peladaId);
       
+      // Buscar dados atuais da pelada para preservar nomes de usuários no ranking
+      const peladaDoc = await getDoc(peladaRef);
+      const rankingAtualizado: Record<string, {
+        nome: string;
+        vitorias: number;
+        gols: number;
+        assistencias: number;
+        pontos: number;
+        jogos: number;
+        derrotas: number;
+        empates: number;
+      }> = {};
+      
+      if (peladaDoc.exists()) {
+        const peladaData = peladaDoc.data();
+        const rankingAtual = peladaData.ranking || {};
+        
+        // Preservar apenas os nomes dos usuários no novo ranking
+        Object.entries(rankingAtual).forEach(([userId, dados]) => {
+          const dadosJogador = dados as RankingData;
+          rankingAtualizado[userId] = {
+            nome: dadosJogador.nome || 'Jogador',
+            vitorias: 0,
+            gols: 0,
+            assistencias: 0,
+            pontos: 0,
+            jogos: 0,
+            derrotas: 0,
+            empates: 0
+          };
+        });
+      }
+      
       await updateDoc(peladaRef, {
         temporada: novaTemporadaData,
-        ranking: {} // Resetar o ranking para nova temporada
+        ranking: rankingAtualizado // Usar o ranking com nomes preservados
       });
       
       toast.success(`Temporada de ${tipoTela} iniciada! Duração: 1 minuto`);
