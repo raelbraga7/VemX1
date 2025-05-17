@@ -15,6 +15,7 @@ interface RankingTimeData {
   golsContra: number;
   saldoGols: number;
   pontos: number;
+  userId?: string | null;
 }
 
 interface SeasonTableTimesProps {
@@ -42,6 +43,9 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     segundos: 0
   });
   const [temporadaPeladaAtiva, setTemporadaPeladaAtiva] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [temporadaCriada, setTemporadaCriada] = useState(false);
+  const [times, setTimes] = useState<RankingTimeData[]>([]);
 
   // Verificar se há uma temporada de pelada ativa
   useEffect(() => {
@@ -69,9 +73,44 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     verificarTemporadaPelada();
   }, [peladaId]);
 
+  // Buscar os times da pelada
+  useEffect(() => {
+    const buscarTimes = async () => {
+      if (peladaId) {
+        try {
+          const peladaRef = doc(db, 'peladas', peladaId);
+          const peladaDoc = await getDoc(peladaRef);
+          
+          if (peladaDoc.exists()) {
+            const peladaData = peladaDoc.data();
+            if (peladaData.times && peladaData.times.lista) {
+              const timesList = Object.entries(peladaData.times.lista).map(([id, data]: [string, any]) => ({
+                id,
+                nome: data.nome,
+                vitorias: data.vitorias || 0,
+                derrotas: data.derrotas || 0,
+                golsPro: data.golsPro || 0,
+                golsContra: data.golsContra || 0,
+                saldoGols: data.saldoGols || 0,
+                pontos: data.pontos || 0,
+                userId: data.userId || null
+              }));
+              setTimes(timesList);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar times:', error);
+        }
+      }
+    };
+    
+    buscarTimes();
+  }, [peladaId]);
+
   // Função para formatar mensagem para o time campeão
   const mensagemCampeao = (nomeTime: string) => {
-    return `🏅 ${nomeTime} é o grande campeão! Superaram todos os desafios e mostraram que têm alma de vencedor. Parabéns, guerreiros! 🏆🔥`;
+    return `Parabéns! O time ${nomeTime} é o campeão da temporada!\n\n` +
+      `Entre em contato com o suporte pelo WhatsApp para receber seu troféu ou premiação! 🏆`;
   };
 
   // Função para calcular o tempo restante
@@ -187,7 +226,7 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
                     await createPeladaNotification(
                       jogador.id,
                       peladaId,
-                      `🏆 VemX1: ${timeCampeao.nome} é Campeão!`,
+                      "Campeão da Temporada de Time",
                       mensagemCampeao(timeCampeao.nome)
                     );
                   } catch (notificationError) {
@@ -268,31 +307,83 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
   };
 
   const handleIniciarTemporadaAutomatica = async () => {
+    setLoading(true);
+
     try {
       // Criar nova temporada com duração de 1 minuto
-      const agora = new Date();
-      const fimTemporada = new Date(agora.getTime() + 60000); // +60000ms = 1 minuto
-      
+      const agora = Timestamp.now();
+      const umMinutoDepois = new Date(agora.toDate().getTime() + 60000); // 1 minuto em milissegundos
+
       const novaTemporadaData = {
-        nome: `Temporada Rápida`,
-        inicio: Timestamp.fromDate(agora),
-        fim: Timestamp.fromDate(fimTemporada),
-        status: 'ativa' as const
+        nome: "Temporada de Time",
+        inicio: agora,
+        fim: Timestamp.fromDate(umMinutoDepois),
+        status: 'ativa',
+        tipo: 'time'
       };
-      
+
+      // Atualizar documento da pelada
       const peladaRef = doc(db, 'peladas', peladaId);
-      
       await updateDoc(peladaRef, {
-        temporada: novaTemporadaData
+        'times.temporada': novaTemporadaData
       });
-      
-      toast.success('Temporada iniciada! Duração: 1 minuto');
-      
-      // Atualiza a página para mostrar a contagem regressiva
-      window.location.reload();
+
+      // Atualizar documento do time vencedor após 1 minuto
+      setTimeout(async () => {
+        try {
+          // Encontrar time com mais pontos
+          const timesOrdenados = [...times].sort((a, b) => b.pontos - a.pontos);
+          const timeCampeao = timesOrdenados[0];
+
+          if (timeCampeao) {
+            // Atualizar pontuação do time
+            const timeRef = doc(db, 'times', timeCampeao.id);
+            await updateDoc(timeRef, {
+              vitorias: timeCampeao.vitorias + 1
+            });
+
+            // Enviar notificação
+            if (timeCampeao.userId) {
+              createPeladaNotification(
+                timeCampeao.userId,
+                peladaId,
+                "Campeão da Temporada de Time",
+                mensagemCampeao(timeCampeao.nome)
+              );
+            }
+
+            // Atualizar documento da pelada com o vencedor
+            const peladaSnapshot = await getDoc(peladaRef);
+            if (peladaSnapshot.exists()) {
+              const peladaData = peladaSnapshot.data();
+              const temporadaAtualizada = {
+                ...peladaData.times.temporada,
+                status: 'encerrada',
+                vencedor: {
+                  id: timeCampeao.id,
+                  nome: timeCampeao.nome,
+                  pontos: timeCampeao.pontos
+                }
+              };
+
+              await updateDoc(peladaRef, {
+                'times.temporada': temporadaAtualizada
+              });
+            }
+          }
+
+          setTemporadaCriada(true);
+        } catch (error) {
+          console.error("Erro ao finalizar temporada:", error);
+        }
+      }, 60000); // 1 minuto em milissegundos
+
+      toast.success('Temporada iniciada com sucesso!');
     } catch (error) {
-      console.error('Erro ao iniciar temporada:', error);
-      toast.error('Erro ao iniciar temporada automática');
+      console.error("Erro ao iniciar temporada:", error);
+      toast.error('Erro ao iniciar temporada');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -356,9 +447,8 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     );
   }
 
-  const temTemporadaAtiva = temporada && temporada.status === 'ativa';
   // Botão desabilitado se há temporada ativa de pelada
-  const buttonDisabled = temporadaPeladaAtiva || temTemporadaAtiva;
+  const buttonDisabled = temporadaPeladaAtiva || temporada && temporada.status === 'ativa';
   
   const botaoCss = buttonDisabled
     ? "px-4 py-2 text-sm bg-gray-400 text-white rounded-lg cursor-not-allowed"
@@ -366,7 +456,7 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     
   const botaoTooltip = temporadaPeladaAtiva
     ? "Aguarde a temporada de pelada terminar para iniciar uma temporada de time"
-    : (temTemporadaAtiva ? "Já existe uma temporada em andamento" : "");
+    : (temporada && temporada.status === 'ativa' ? "Já existe uma temporada em andamento" : "");
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
@@ -375,11 +465,11 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
         {isOwner && (
           <div title={botaoTooltip}>
             <button
-              onClick={temTemporadaAtiva ? () => setEditando(true) : handleIniciarTemporadaAutomatica}
+              onClick={temporada && temporada.status === 'ativa' ? () => setEditando(true) : handleIniciarTemporadaAutomatica}
               className={botaoCss}
               disabled={buttonDisabled}
             >
-              {temTemporadaAtiva ? 'Editar' : 'Iniciar Temporada'}
+              {temporada && temporada.status === 'ativa' ? 'Editar' : 'Iniciar Temporada'}
             </button>
           </div>
         )}
