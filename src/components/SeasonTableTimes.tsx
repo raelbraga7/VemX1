@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
@@ -201,11 +201,66 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
                 : melhor;
             }, { id: '', nome: '', vitorias: 0, derrotas: 0, golsPro: 0, golsContra: 0, saldoGols: 0, pontos: 0 });
 
-            // Atualiza o status da temporada e ZERA o ranking de times e estatísticas dos jogadores
+            // Atualiza o status da temporada
             await updateDoc(peladaRef, {
-              'temporada.status': 'encerrada',
-              'rankingTimes': {}, // Zera o ranking de times
-              'estatisticasTime': {} // Zera as estatísticas dos jogadores por time
+              'temporada.status': 'encerrada'
+            });
+            
+            // Zerar o ranking de times e preservar apenas os nomes
+            const rankingZerado: Record<string, RankingTimeData> = {};
+            
+            times.forEach(([timeId, dados]) => {
+              const timeData = dados as RankingTimeData;
+              rankingZerado[timeId] = {
+                id: timeId,
+                nome: timeData.nome,
+                vitorias: 0,
+                derrotas: 0,
+                golsPro: 0,
+                golsContra: 0,
+                saldoGols: 0,
+                pontos: 0,
+                userId: timeData.userId || null
+              };
+            });
+            
+            // Zerar as estatísticas dos jogadores nos times
+            const timesRef = collection(db, 'times');
+            const q = query(timesRef, where('peladaId', '==', peladaId));
+            const timesSnapshot = await getDocs(q);
+            
+            interface JogadorTime {
+              id: string;
+              nome: string;
+              [key: string]: any;
+            }
+            
+            const atualizacoesTimes = timesSnapshot.docs.map(doc => {
+              const timeDoc = doc.data();
+              const timeRef = doc.ref;
+              
+              // Zerar estatísticas de gols e assistências para cada jogador do time
+              const jogadoresZerados = (timeDoc.jogadores || []).map((jogador: JogadorTime) => ({
+                ...jogador,
+                gols: 0,
+                assistencias: 0,
+                vitorias: 0,
+                derrotas: 0,
+                empates: 0,
+                pontos: 0
+              }));
+              
+              return updateDoc(timeRef, {
+                jogadores: jogadoresZerados
+              });
+            });
+            
+            // Executa todas as atualizações de times em paralelo
+            await Promise.all(atualizacoesTimes);
+            
+            // Atualiza o ranking zerado no documento da pelada
+            await updateDoc(peladaRef, {
+              rankingTimes: rankingZerado
             });
             
             // Notifica os jogadores do time campeão
