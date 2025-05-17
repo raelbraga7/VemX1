@@ -198,33 +198,6 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
                 rankingTimes: rankingTimesAtualizado
               });
               
-              // Buscar e zerar estatísticas dos jogadores por time
-              const timesRef = collection(db, 'times');
-              const q = query(timesRef, where('peladaId', '==', peladaId));
-              const timesSnapshot = await getDocs(q);
-              
-              const atualizacoesTimes = timesSnapshot.docs.map(async (timeDoc) => {
-                const timeRef = doc(db, 'times', timeDoc.id);
-                const jogadoresStats = collection(timeRef, 'jogadoresStats');
-                const jogadoresStatsSnapshot = await getDocs(jogadoresStats);
-                
-                // Zerar estatísticas de cada jogador dentro do time
-                const atualizacoesJogadores = jogadoresStatsSnapshot.docs.map(async (jogadorDoc) => {
-                  await updateDoc(doc(jogadoresStats, jogadorDoc.id), {
-                    vitorias: 0,
-                    derrotas: 0,
-                    gols: 0,
-                    assistencias: 0,
-                    pontos: 0,
-                    jogos: 0
-                  });
-                });
-                
-                await Promise.all(atualizacoesJogadores);
-              });
-              
-              await Promise.all(atualizacoesTimes);
-              
               toast.success('Temporada de Time encerrada! O ranking de times foi zerado.');
               clearInterval(intervalo);
               return;
