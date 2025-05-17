@@ -113,6 +113,11 @@ const NotificationActionButtons: React.FC<NotificationActionButtonsProps> = Reac
 
 NotificationActionButtons.displayName = 'NotificationActionButtons';
 
+// Adicionar uma função para renderizar HTML de forma segura
+const renderHTML = (html: string) => {
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+};
+
 const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
   isOpen,
   notifications,
@@ -241,10 +246,10 @@ const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
                           {formatNotificationDate(notification.timestamp)}
                         </time>
                       </div>
-                      <div 
-                        className="text-sm text-gray-600 mb-3"
-                        dangerouslySetInnerHTML={{ __html: notification.message }}
-                      />
+                      {/* Renderizar o HTML em vez de texto plano */}
+                      <div className="text-sm text-gray-600 mb-3">
+                        {renderHTML(notification.message)}
+                      </div>
                       
                       <NotificationActionButtons
                         notification={notification}
