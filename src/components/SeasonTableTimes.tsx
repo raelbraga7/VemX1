@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc, updateDoc, getDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
 import { createPeladaNotification } from '@/firebase/notificationService';
@@ -48,6 +48,7 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
   const [loading, setLoading] = useState(false);
   const [temporadaCriada, setTemporadaCriada] = useState(false);
   const [times, setTimes] = useState<RankingTimeData[]>([]);
+  const [showConfirmacao, setShowConfirmacao] = useState(false);
 
   // Verificar se há uma temporada de pelada ativa
   useEffect(() => {
@@ -204,63 +205,6 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
             // Atualiza o status da temporada
             await updateDoc(peladaRef, {
               'temporada.status': 'encerrada'
-            });
-            
-            // Zerar o ranking de times e preservar apenas os nomes
-            const rankingZerado: Record<string, RankingTimeData> = {};
-            
-            times.forEach(([timeId, dados]) => {
-              const timeData = dados as RankingTimeData;
-              rankingZerado[timeId] = {
-                id: timeId,
-                nome: timeData.nome,
-                vitorias: 0,
-                derrotas: 0,
-                golsPro: 0,
-                golsContra: 0,
-                saldoGols: 0,
-                pontos: 0,
-                userId: timeData.userId || null
-              };
-            });
-            
-            // Zerar as estatísticas dos jogadores nos times
-            const timesRef = collection(db, 'times');
-            const q = query(timesRef, where('peladaId', '==', peladaId));
-            const timesSnapshot = await getDocs(q);
-            
-            interface JogadorTime {
-              id: string;
-              nome: string;
-              [key: string]: any;
-            }
-            
-            const atualizacoesTimes = timesSnapshot.docs.map(doc => {
-              const timeDoc = doc.data();
-              const timeRef = doc.ref;
-              
-              // Zerar estatísticas de gols e assistências para cada jogador do time
-              const jogadoresZerados = (timeDoc.jogadores || []).map((jogador: JogadorTime) => ({
-                ...jogador,
-                gols: 0,
-                assistencias: 0,
-                vitorias: 0,
-                derrotas: 0,
-                empates: 0,
-                pontos: 0
-              }));
-              
-              return updateDoc(timeRef, {
-                jogadores: jogadoresZerados
-              });
-            });
-            
-            // Executa todas as atualizações de times em paralelo
-            await Promise.all(atualizacoesTimes);
-            
-            // Atualiza o ranking zerado no documento da pelada
-            await updateDoc(peladaRef, {
-              rankingTimes: rankingZerado
             });
             
             // Notifica os jogadores do time campeão
@@ -448,6 +392,10 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     }
   };
 
+  const handleConfirmarIniciarTemporada = () => {
+    setShowConfirmacao(true);
+  };
+
   if (editando) {
     return (
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -520,51 +468,78 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     : (temporada && temporada.status === 'ativa' ? "Já existe uma temporada em andamento" : "");
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">{temporada?.nome || 'Temporada Atual'}</h2>
-        {isOwner && (
-          <div title={botaoTooltip}>
-            <button
-              onClick={temporada && temporada.status === 'ativa' ? () => setEditando(true) : handleIniciarTemporadaAutomatica}
-              className={botaoCss}
-              disabled={buttonDisabled}
-            >
-              {temporada && temporada.status === 'ativa' ? 'Editar' : 'Iniciar Temporada'}
-            </button>
+    <>
+      {showConfirmacao && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+            <h3 className="text-xl font-bold mb-4">Confirmar início de temporada</h3>
+            <p className="mb-6">Tem certeza de que quer começar a temporada de time? Essa ação não poderá ser desfeita.</p>
+            <div className="flex justify-end space-x-3">
+              <button 
+                onClick={() => setShowConfirmacao(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  setShowConfirmacao(false);
+                  handleIniciarTemporadaAutomatica();
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="flex justify-center items-center space-x-8">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.dias).padStart(3, '0')}</div>
-          <div className="text-gray-600 uppercase text-sm">Dias</div>
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">{temporada?.nome || "Temporada de Time"}</h2>
+          {isOwner && (
+            <button
+              onClick={handleConfirmarIniciarTemporada}
+              className={`px-4 py-2 text-sm ${buttonDisabled ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"} text-white rounded-lg transition-colors`}
+              disabled={buttonDisabled}
+              title={botaoTooltip}
+            >
+              {tempoRestante.dias === 0 && tempoRestante.horas === 0 && tempoRestante.minutos === 0 && tempoRestante.segundos === 0 ? "Temporada em Andamento" : "Iniciar Temporada"}
+            </button>
+          )}
         </div>
-        <div className="text-center">
-          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.horas).padStart(2, '0')}</div>
-          <div className="text-gray-600 uppercase text-sm">Horas</div>
-        </div>
-        <div className="text-center">
-          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.minutos).padStart(2, '0')}</div>
-          <div className="text-gray-600 uppercase text-sm">Min</div>
-        </div>
-        <div className="text-center">
-          <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.segundos).padStart(2, '0')}</div>
-          <div className="text-gray-600 uppercase text-sm">Seg</div>
-        </div>
-      </div>
 
-      <div className="mt-6 text-sm text-gray-600">
-        <div className="flex justify-between items-center py-2">
-          <span>Início:</span>
-          <span>{temporada?.inicio ? new Date(temporada.inicio.seconds * 1000).toLocaleDateString() : 'Não definido'}</span>
+        <div className="flex justify-center items-center space-x-8">
+          <div className="text-center">
+            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.dias).padStart(3, '0')}</div>
+            <div className="text-gray-600 uppercase text-sm">Dias</div>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.horas).padStart(2, '0')}</div>
+            <div className="text-gray-600 uppercase text-sm">Horas</div>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.minutos).padStart(2, '0')}</div>
+            <div className="text-gray-600 uppercase text-sm">Min</div>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl font-bold text-red-600 mb-1">{String(tempoRestante.segundos).padStart(2, '0')}</div>
+            <div className="text-gray-600 uppercase text-sm">Seg</div>
+          </div>
         </div>
-        <div className="flex justify-between items-center py-2">
-          <span>Término:</span>
-          <span>{temporada?.fim ? new Date(temporada.fim.seconds * 1000).toLocaleDateString() : 'Não definido'}</span>
+
+        <div className="mt-6 text-sm text-gray-600">
+          <div className="flex justify-between items-center py-2">
+            <span>Início:</span>
+            <span>{temporada?.inicio ? new Date(temporada.inicio.seconds * 1000).toLocaleDateString() : 'Não definido'}</span>
+          </div>
+          <div className="flex justify-between items-center py-2">
+            <span>Término:</span>
+            <span>{temporada?.fim ? new Date(temporada.fim.seconds * 1000).toLocaleDateString() : 'Não definido'}</span>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 } 
