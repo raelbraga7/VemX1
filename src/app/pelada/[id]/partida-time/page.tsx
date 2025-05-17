@@ -804,33 +804,16 @@ export default function PartidaTime() {
         
         {/* Botão Finalizar Partida */}
         <div className="fixed bottom-6 right-6">
-          {tempoAcabou ? (
-            <Fab 
-              variant="extended" 
-              color="secondary" 
-              onClick={async () => {
-                const rankingAtualizado = await handleFinalizarPartida();
-                if (rankingAtualizado) {
-                  toast.success('Partida finalizada e ranking atualizado!');
-                }
-              }}
+          {!rodando && (
+            <Fab
+              variant="extended"
+              color="primary"
+              onClick={handleToggleCronometro}
               sx={{ px: 3 }}
             >
-              <FlagIcon sx={{ mr: 1 }} />
-              FINALIZAR PARTIDA
+              <PlayArrowIcon sx={{ mr: 1 }} />
+              INICIAR PARTIDA
             </Fab>
-          ) : (
-            rodando ? null : (
-              <Fab
-                variant="extended"
-                color="primary"
-                onClick={handleToggleCronometro}
-                sx={{ px: 3 }}
-              >
-                <PlayArrowIcon sx={{ mr: 1 }} />
-                INICIAR PARTIDA
-              </Fab>
-            )
           )}
         </div>
       </div>
