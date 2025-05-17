@@ -41,6 +41,7 @@ interface Time {
   jogadores: Jogador[];
   peladaId: string;
   createdAt: Timestamp;
+  capitaoId?: string;
 }
 
 interface RankingTime {
@@ -317,12 +318,30 @@ export default function TimeSelecionado() {
       const timeRef = doc(collection(db, 'times'));
       const teamName = `Time ${teamLetter}`;
       
+      // Verifica se o criador quer entrar automaticamente no time
+      const entrarNoTime = true; // Podemos transformar isso em uma opção configurável no futuro
+      
+      let jogadoresIniciais: Jogador[] = [];
+      
+      // Se o criador quiser entrar no time como primeiro jogador
+      if (entrarNoTime) {
+        const novoJogador: Jogador = {
+          id: user.uid,
+          nome: user.displayName || user.email?.split('@')[0] || 'Usuário',
+          photoURL: user.photoURL || null,
+          dataEntrada: new Date().toISOString()
+        };
+        jogadoresIniciais = [novoJogador];
+      }
+      
       const newTeam = {
         id: timeRef.id,
         name: teamName,
-        jogadores: [],
+        jogadores: jogadoresIniciais,
         peladaId,
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
+        // Se o criador entrar no time, ele será o capitão automaticamente
+        capitaoId: entrarNoTime ? user.uid : undefined
       };
       
       // Criar o time no Firestore
@@ -331,7 +350,12 @@ export default function TimeSelecionado() {
       // Adicionar o time ao ranking da pelada
       await adicionarTimeAoRanking(timeRef.id, teamName, peladaId);
       
-      setNotification(`Novo time ${teamLetter} adicionado!`);
+      const mensagem = entrarNoTime 
+        ? `Novo time ${teamLetter} adicionado! Você entrou como capitão!` 
+        : `Novo time ${teamLetter} adicionado!`;
+      
+      setNotification(mensagem);
+      toast.success(mensagem);
       
       // Auto-esconder a notificação após 5 segundos
       setTimeout(() => {
@@ -403,11 +427,27 @@ export default function TimeSelecionado() {
         dataEntrada: new Date().toISOString()
       };
       
-      await updateDoc(timeRef, {
-        jogadores: arrayUnion(novoJogador)
-      });
-
-      setNotification(`Você entrou no ${teamName}`);
+      // Verifica se este é o primeiro jogador (será o capitão)
+      const timeDoc = await getDoc(timeRef);
+      const timeData = timeDoc.data() as Time;
+      const ehPrimeiroJogador = !timeData.jogadores || timeData.jogadores.length === 0;
+      
+      // Se for o primeiro jogador, atualiza o capitaoId
+      if (ehPrimeiroJogador) {
+        await updateDoc(timeRef, {
+          jogadores: arrayUnion(novoJogador),
+          capitaoId: user.uid
+        });
+        
+        toast.success(`Você entrou no ${teamName} como capitão!`);
+        setNotification(`Você entrou no ${teamName} como capitão!`);
+      } else {
+        await updateDoc(timeRef, {
+          jogadores: arrayUnion(novoJogador)
+        });
+        
+        setNotification(`Você entrou no ${teamName}`);
+      }
       
       setTimeout(() => {
         setNotification('');
@@ -430,9 +470,26 @@ export default function TimeSelecionado() {
       const jogador = time.jogadores.find(j => j.id === user.uid);
       
       if (jogador) {
+        // Verifica se o jogador que está saindo é o capitão
+        const ehCapitao = time.capitaoId === user.uid;
+        
         await updateDoc(timeRef, {
           jogadores: arrayRemove(jogador)
         });
+        
+        // Se o capitão está saindo e ainda há jogadores, transfere a capitania para o próximo jogador
+        if (ehCapitao && time.jogadores.length > 1) {
+          // Encontra o próximo jogador que não é o atual capitão
+          const proximoJogador = time.jogadores.find(j => j.id !== user.uid);
+          
+          if (proximoJogador) {
+            await updateDoc(timeRef, {
+              capitaoId: proximoJogador.id
+            });
+            
+            toast.success(`A capitania foi transferida para ${proximoJogador.nome}`);
+          }
+        }
       }
 
       setNotification("Você saiu do time");
@@ -687,7 +744,7 @@ export default function TimeSelecionado() {
                         {jogador.nome.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="text-gray-700">
-                        {jogador.nome} {jogador.id === user?.uid && '(Você)'}
+                        {jogador.nome} {jogador.id === user?.uid && '(Você)'} {jogador.id === team.capitaoId && '👑'}
                       </div>
                     </div>
                   ))}
