@@ -69,12 +69,12 @@ export default function Header() {
     }
   };
 
-  const handleConfirm = async (notification: NotificationWithId) => {
+  const handleConfirm = async (_notification: NotificationWithId) => {
     // Implementação da função handleConfirm
     toast.success('Notificação confirmada');
   };
 
-  const handleReject = async (notification: NotificationWithId) => {
+  const handleReject = async (_notification: NotificationWithId) => {
     // Implementação da função handleReject
     toast.info('Notificação rejeitada');
   };
@@ -97,7 +97,7 @@ export default function Header() {
           
           {user && temAssinaturaAtiva && !verificandoAssinatura && (
             <button
-              onClick={() => router.push('/dashboard?openCancelModal=true')}
+              onClick={() => router.push('/api/usuario/cancelar-manual')}
               className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors"
             >
               Cancelar Assinatura

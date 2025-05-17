@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/firebase/admin';
+import { auth } from '@/firebase/admin';
+import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   // Configurar headers CORS para permitir solicitações de qualquer origem
@@ -85,4 +87,37 @@ export async function OPTIONS() {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
+}
+
+export async function GET() {
+  try {
+    // Obter o token da sessão dos cookies
+    const sessionCookie = cookies().get('session')?.value;
+    
+    if (!sessionCookie) {
+      return NextResponse.redirect('/login');
+    }
+    
+    // Verificar o token com o Firebase
+    const decodedClaims = await auth.verifySessionCookie(sessionCookie);
+    const userId = decodedClaims.uid;
+    
+    if (!userId) {
+      return NextResponse.redirect('/login');
+    }
+    
+    // Atualizar o status da assinatura no Firestore
+    await db.collection('usuarios').doc(userId).update({
+      assinaturaAtiva: false,
+      premium: false,
+      statusAssinatura: 'cancelada',
+      plano: null
+    });
+    
+    // Redirecionar para o dashboard com mensagem de sucesso
+    return NextResponse.redirect('/dashboard?message=Assinatura+cancelada+com+sucesso');
+  } catch (error) {
+    console.error('Erro ao cancelar assinatura:', error);
+    return NextResponse.redirect('/dashboard?error=Erro+ao+cancelar+assinatura');
+  }
 } 
