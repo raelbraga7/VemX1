@@ -4,9 +4,6 @@ import { useState, useEffect } from 'react';
 import { doc, updateDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { toast } from 'react-toastify';
-import { createPeladaNotification } from '@/firebase/notificationService';
-import { renderToString } from 'react-dom/server';
-import MensagemCampeao from './MensagemCampeao';
 
 interface RankingTimeData {
   id: string;
@@ -207,38 +204,7 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
               'temporada.status': 'encerrada'
             });
             
-            // Notifica os jogadores do time campeão
-            if (timeCampeao) {
-              // Buscar todos os jogadores do time campeão
-              const timeRef = doc(db, 'times', timeCampeao.id);
-              const timeDoc = await getDoc(timeRef);
-              
-              if (timeDoc.exists()) {
-                const timeData = timeDoc.data();
-                const jogadores = timeData.jogadores || [];
-                
-                // Enviar notificação para cada jogador do time
-                for (const jogador of jogadores) {
-                  try {
-                    const mensagemHTML = renderToString(
-                      <MensagemCampeao nomeTime={timeCampeao.nome} />
-                    );
-                      
-                    await createPeladaNotification(
-                      jogador.id,
-                      peladaId,
-                      "Campeão da Temporada de Time",
-                      mensagemHTML
-                    );
-                  } catch (notificationError) {
-                    console.error('Erro ao enviar notificação para jogador:', notificationError);
-                    // Continua enviando para os outros jogadores mesmo se falhar para um
-                  }
-                }
-                
-                toast.success(`Temporada encerrada! ${timeCampeao.nome} é o campeão!`);
-              }
-            }
+            toast.success(`Temporada encerrada! ${timeCampeao.nome} é o campeão!`);
           }
           
           // Limpa o intervalo para parar completamente as verificações
@@ -342,20 +308,6 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
             await updateDoc(timeRef, {
               vitorias: timeCampeao.vitorias + 1
             });
-
-            // Enviar notificação
-            if (timeCampeao.userId) {
-              const mensagemHTML = renderToString(
-                <MensagemCampeao nomeTime={timeCampeao.nome} />
-              );
-              
-              createPeladaNotification(
-                timeCampeao.userId,
-                peladaId,
-                "Campeão da Temporada de Time",
-                mensagemHTML
-              );
-            }
 
             // Atualizar documento da pelada com o vencedor
             const peladaSnapshot = await getDoc(peladaRef);
