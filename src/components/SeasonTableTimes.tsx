@@ -45,6 +45,8 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     segundos: 0
   });
   const [temporadaPeladaAtiva, setTemporadaPeladaAtiva] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [temporadaCriada, setTemporadaCriada] = useState(false);
   const [times, setTimes] = useState<RankingTimeData[]>([]);
 
   // Verificar se há uma temporada de pelada ativa
@@ -84,30 +86,17 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
           if (peladaDoc.exists()) {
             const peladaData = peladaDoc.data();
             if (peladaData.times && peladaData.times.lista) {
-              const timesList = Object.entries(peladaData.times.lista).map(([id, data]: [string, unknown]) => {
-                const timeData = data as {
-                  nome?: string;
-                  vitorias?: number;
-                  derrotas?: number;
-                  golsPro?: number;
-                  golsContra?: number;
-                  saldoGols?: number;
-                  pontos?: number;
-                  userId?: string | null;
-                };
-                
-                return {
-                  id,
-                  nome: timeData.nome || '',
-                  vitorias: timeData.vitorias || 0,
-                  derrotas: timeData.derrotas || 0,
-                  golsPro: timeData.golsPro || 0,
-                  golsContra: timeData.golsContra || 0,
-                  saldoGols: timeData.saldoGols || 0,
-                  pontos: timeData.pontos || 0,
-                  userId: timeData.userId || null
-                };
-              });
+              const timesList = Object.entries(peladaData.times.lista).map(([id, data]: [string, any]) => ({
+                id,
+                nome: data.nome,
+                vitorias: data.vitorias || 0,
+                derrotas: data.derrotas || 0,
+                golsPro: data.golsPro || 0,
+                golsContra: data.golsContra || 0,
+                saldoGols: data.saldoGols || 0,
+                pontos: data.pontos || 0,
+                userId: data.userId || null
+              }));
               setTimes(timesList);
             }
           }
@@ -212,9 +201,11 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
                 : melhor;
             }, { id: '', nome: '', vitorias: 0, derrotas: 0, golsPro: 0, golsContra: 0, saldoGols: 0, pontos: 0 });
 
-            // Atualiza o status da temporada
+            // Atualiza o status da temporada e ZERA o ranking de times e estatísticas dos jogadores
             await updateDoc(peladaRef, {
-              'temporada.status': 'encerrada'
+              'temporada.status': 'encerrada',
+              'rankingTimes': {}, // Zera o ranking de times
+              'estatisticasTime': {} // Zera as estatísticas dos jogadores por time
             });
             
             // Notifica os jogadores do time campeão
@@ -318,6 +309,8 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
   };
 
   const handleIniciarTemporadaAutomatica = async () => {
+    setLoading(true);
+
     try {
       // Criar nova temporada com duração de 1 minuto
       const agora = Timestamp.now();
@@ -385,8 +378,7 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
             }
           }
 
-          // Recarregar a página para mostrar as alterações
-          window.location.reload();
+          setTemporadaCriada(true);
         } catch (error) {
           console.error("Erro ao finalizar temporada:", error);
         }
@@ -396,6 +388,8 @@ export default function SeasonTableTimes({ peladaId, temporada, isOwner }: Seaso
     } catch (error) {
       console.error("Erro ao iniciar temporada:", error);
       toast.error('Erro ao iniciar temporada');
+    } finally {
+      setLoading(false);
     }
   };
 
