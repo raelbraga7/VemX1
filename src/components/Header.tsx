@@ -97,7 +97,7 @@ export default function Header() {
           
           {user && temAssinaturaAtiva && !verificandoAssinatura && (
             <button
-              onClick={() => router.push('/api/usuario/cancelar-manual')}
+              onClick={() => window.open('https://hotmart.com/pt-br/marketplace/assinaturas', '_blank')}
               className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors"
             >
               Cancelar Assinatura
