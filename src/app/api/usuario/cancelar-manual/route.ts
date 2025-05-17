@@ -95,7 +95,8 @@ export async function OPTIONS() {
 export async function GET() {
   try {
     // Obter o token da sessão dos cookies
-    const sessionCookie = cookies().get('session')?.value;
+    const cookiesStore = await cookies();
+    const sessionCookie = cookiesStore.get('session')?.value;
     
     if (!sessionCookie) {
       return NextResponse.redirect('/login');
