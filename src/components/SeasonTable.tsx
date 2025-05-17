@@ -236,6 +236,12 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
               
               toast.success('Temporada de Time encerrada! O ranking de times e as estatísticas dos jogadores foram zerados.');
               clearInterval(intervalo);
+              
+              // Forçar a atualização da página para refletir as mudanças em todas as telas
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500); // Atraso para que o usuário veja a mensagem antes da atualização
+              
               return;
             }
           }
@@ -299,6 +305,11 @@ export default function SeasonTable({ peladaId, temporada, isOwner, tipoTela = '
             }
 
             toast.success('Temporada de Pelada encerrada! O ranking foi zerado.');
+            
+            // Forçar a atualização da página para refletir as mudanças em todas as telas
+            setTimeout(() => {
+              window.location.reload();
+            }, 1500); // Atraso para que o usuário veja a mensagem antes da atualização
           }
           
           // Limpa o intervalo para parar completamente as verificações
