@@ -127,12 +127,14 @@ export default function PaginaPelada() {
         <div className="bg-white border-b border-gray-200 mb-6">
           <div className="container mx-auto">
             <div className="flex space-x-8 border-b">
-              <Link href={`/pelada/${params?.id}`} className="relative py-4 px-6 font-medium text-sm text-blue-600">
+              <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
                 PELADA
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
-              </Link>
-              <Link href="/time" className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
-                TIME
+              </button>
+              <Link href={`/time?peladaId=${params?.id}`} replace>
+                <button className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
+                  TIME
+                </button>
               </Link>
             </div>
           </div>

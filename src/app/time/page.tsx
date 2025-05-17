@@ -549,17 +549,15 @@ export default function TimeSelecionado() {
           <h2 className="text-2xl font-semibold py-6">Time Selecionado</h2>
           
           <div className="flex space-x-8 border-b">
-            <Link href={peladaId ? `/pelada/${peladaId}` : "/dashboard"}>
+            <Link href={peladaId ? `/pelada/${peladaId}` : "/dashboard"} replace>
               <button className="relative py-4 px-6 font-medium text-sm text-gray-500 hover:text-gray-700">
                 PELADA
               </button>
             </Link>
-            <Link href="/time">
-              <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
-                TIME
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
-              </button>
-            </Link>
+            <button className="relative py-4 px-6 font-medium text-sm text-blue-600">
+              TIME
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500"></div>
+            </button>
           </div>
         </div>
       </div>
