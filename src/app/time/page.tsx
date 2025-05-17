@@ -480,6 +480,12 @@ export default function TimeSelecionado() {
       return;
     }
 
+    // Verificar se existe uma temporada ativa
+    if (!peladaData?.temporada || peladaData.temporada.status !== 'ativa') {
+      toast.error('É necessário iniciar uma temporada antes de iniciar a partida!');
+      return;
+    }
+
     localStorage.setItem(`timesSelecionados_${peladaId}`, JSON.stringify(timesSelecionados));
     
     // Redireciona para a nova página de partida-time em vez da página de confirmação
@@ -703,16 +709,18 @@ export default function TimeSelecionado() {
         <div className="flex-1 mt-auto">
           <button 
             onClick={handleIniciarPartida}
-            disabled={timesSelecionados.length !== 2 || !temAssinaturaAtiva}
+            disabled={timesSelecionados.length !== 2 || !temAssinaturaAtiva || !peladaData?.temporada || peladaData?.temporada?.status !== 'ativa'}
             className={`py-3 px-4 rounded-md flex items-center justify-center mb-4 mt-auto transition-all duration-300 ${
-              timesSelecionados.length === 2 && temAssinaturaAtiva
+              timesSelecionados.length === 2 && temAssinaturaAtiva && peladaData?.temporada?.status === 'ativa'
                 ? 'bg-green-500 hover:bg-green-600 text-white'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
             style={{ position: 'fixed', bottom: '20px', right: '20px', width: 'calc(100% - 40px)', maxWidth: '200px' }}
           >
             {timesSelecionados.length === 2 
-              ? 'Iniciar Partida' 
+              ? (!peladaData?.temporada || peladaData?.temporada?.status !== 'ativa')
+                ? 'Inicie a Temporada'
+                : 'Iniciar Partida'
               : `Selecione mais ${2 - timesSelecionados.length} time(s)`}
           </button>
         </div>
