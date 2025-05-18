@@ -84,7 +84,7 @@ interface RankingTimeUpdate {
 }
 
 export default function TimeSelecionado() {
-  const { user, temAssinaturaAtiva, verificandoAssinatura } = useUser();
+  const { user, temAssinaturaAtiva, verificandoAssinatura, isConvidado } = useUser();
   const [notification, setNotification] = useState('');
   const [teams, setTeams] = useState<Time[]>([]);
   const [isOwner, setIsOwner] = useState(false);
@@ -781,8 +781,8 @@ export default function TimeSelecionado() {
         </div>
       </div>
       
-      {/* Banner de Acesso Limitado - Apenas para donos da pelada */}
-      {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && (
+      {/* Banner de Acesso Limitado - Apenas para donos da pelada que não sejam convidados */}
+      {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && !isConvidado && (
         <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
           <h3 className="font-bold mb-2">Acesso Limitado</h3>
           <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>

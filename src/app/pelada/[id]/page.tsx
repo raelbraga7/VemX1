@@ -21,30 +21,16 @@ interface Time {
 }
 
 export default function PaginaPelada() {
-  const { user, temAssinaturaAtiva, verificandoAssinatura } = useUser();
+  const { user, temAssinaturaAtiva, verificandoAssinatura, isConvidado } = useUser();
   const params = useParams();
   const searchParams = useSearchParams();
-  const [showModal, setShowModal] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
+  const peladaId = params.id as string;
+
+  const [pelada, setPelada] = useState<PeladaData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [times] = useState<Time[]>([]);
-  const [peladaData, setPeladaData] = useState<PeladaData | null>(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('Configurações');
   const [isOwner, setIsOwner] = useState(false);
-  const [bannerFechado, setBannerFechado] = useState(false);
-
-  useEffect(() => {
-    // Verificar se o banner foi fechado anteriormente
-    if (typeof window !== 'undefined') {
-      const bannerStatus = localStorage.getItem('bannerFechado');
-      setBannerFechado(bannerStatus === 'true');
-    }
-  }, []);
-
-  const fecharBanner = () => {
-    localStorage.setItem('bannerFechado', 'true');
-    setBannerFechado(true);
-  };
 
   useEffect(() => {
     const init = async () => {
@@ -62,7 +48,7 @@ export default function PaginaPelada() {
 
         // Busca os dados da pelada
         const pelada = await getPelada(id);
-        setPeladaData(pelada);
+        setPelada(pelada);
         const isDono = pelada.ownerId === user?.uid;
         setIsOwner(isDono);
         console.log('Verificação de dono da pelada:', {
@@ -146,7 +132,7 @@ export default function PaginaPelada() {
             <div className="bg-white p-6 rounded-lg shadow">
               <h2 className="text-xl font-semibold mb-4">Ações</h2>
               <div className="space-y-4">
-                {peladaData?.ownerId === user?.uid && (
+                {pelada?.ownerId === user?.uid && (
                   <>
                     <div className="relative group">
                       <button
@@ -165,7 +151,7 @@ export default function PaginaPelada() {
                     
                     <div className="relative group">
                       {temAssinaturaAtiva ? (
-                        <InviteButton peladaId={params?.id as string} />
+                        <InviteButton peladaId={peladaId} />
                       ) : (
                         <button
                           onClick={() => toast.error('Assine um plano para convidar jogadores')}
@@ -203,11 +189,11 @@ export default function PaginaPelada() {
           {/* Coluna da Direita */}
           <div className="lg:col-span-3">
             {/* Season Table */}
-            {peladaData && (
+            {pelada && (
               <div className="mb-8">
                 <SeasonTable 
-                  peladaId={params?.id as string}
-                  temporada={peladaData.temporada}
+                  peladaId={peladaId}
+                  temporada={pelada.temporada}
                   isOwner={isOwner && temAssinaturaAtiva}
                   tipoTela="pelada"
                 />
@@ -218,7 +204,7 @@ export default function PaginaPelada() {
             <div className="bg-black rounded-lg shadow-lg overflow-hidden">
               <div className="p-4 sm:p-6">
                 <h2 className="text-xl font-semibold text-white mb-4">Ranking dos Jogadores</h2>
-                <RankingTable peladaId={params?.id as string} />
+                <RankingTable peladaId={peladaId} />
               </div>
             </div>
           </div>
@@ -264,28 +250,17 @@ export default function PaginaPelada() {
             isOpen={showConfigModal}
             onClose={() => setShowConfigModal(false)}
             onSave={handleConfigSaved}
-            peladaId={params?.id as string}
+            peladaId={peladaId}
           />
         )}
 
-        {/* Banner de Acesso Limitado - Exibe apenas para o dono da pelada */}
-        {isOwner && (temAssinaturaAtiva === false) && !verificandoAssinatura && !bannerFechado && (
-          <div className="fixed bottom-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs z-50">
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="font-bold">Acesso Limitado</h3>
-              <button 
-                onClick={fecharBanner}
-                className="text-white hover:text-gray-200 ml-2"
-                aria-label="Fechar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </div>
+        {/* Banner de Acesso Limitado - Apenas para donos da pelada que não sejam convidados */}
+        {isOwner && !temAssinaturaAtiva && !verificandoAssinatura && !isConvidado && (
+          <div className="fixed bottom-4 left-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs">
+            <h3 className="font-bold mb-2">Acesso Limitado</h3>
             <p className="text-sm mb-3">Algumas funcionalidades estão bloqueadas. Assine um plano para desbloquear.</p>
             <button 
-              onClick={() => window.location.href = '/dashboard?openPlanosModal=true'}
+              onClick={() => setShowConfigModal(true)}
               className="w-full bg-white text-blue-600 py-2 px-4 rounded hover:bg-blue-100 transition-colors font-medium"
             >
               Ver Planos
